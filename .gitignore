@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+models/
+vendor/
+outputs/
+.DS_Store
+*.log

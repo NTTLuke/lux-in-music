@@ -1,0 +1,50 @@
+{
+  "host": "127.0.0.1",
+  "port": 8089,
+  "backend": "metal",
+  "device": 0,
+  "threads": 8,
+  "lazy_load": true,
+  "models": [
+    {
+      "id": "yue2",
+      "family": "yue2",
+      "path": "../models/Yue2-3B-GGUF",
+      "task": "gen",
+      "mode": "offline",
+      "session_options": {
+        "yue2.model_gguf": "yue2-3b-q8_0.gguf",
+        "yue2.vae_gguf": "yue2-vae-f16.gguf"
+      }
+    },
+    {
+      "id": "sep-vocals",
+      "family": "bs_roformer",
+      "path": "../models/sep/BS-RoFormer-ep368-GGUF/bs-roformer-ep368-q8_0.gguf",
+      "task": "sep",
+      "mode": "offline"
+    },
+    {
+      "id": "sep-4stems",
+      "family": "htdemucs",
+      "path": "../models/sep/HTDemucs-GGUF/htdemucs-q8_0.gguf",
+      "task": "sep",
+      "mode": "offline"
+    },
+    {
+      "id": "sep-6stems",
+      "family": "htdemucs_6stems",
+      "path": "../models/sep/HTDemucs-6stems-GGUF/htdemucs-6stems-q8_0.gguf",
+      "task": "sep",
+      "mode": "offline"
+    },
+    {
+      "id": "sep-anything",
+      "family": "sam_audio",
+      "path": "../models/sep/SAM-Audio-GGUF/sam-audio-base-q8_0.gguf",
+      "task": "s2s",
+      "mode": "offline"
+    }
+  ],
+  "model_spec_override": "../vendor/audio.cpp/model_specs"
+}

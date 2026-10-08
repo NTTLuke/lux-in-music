@@ -1,0 +1,120 @@
+/* ============================================================
+   LUX IN MUSIC: theme after "Lux In Tenebris" (luxintenebris.news)
+   A dark broadsheet; amber lamplight is the only light.
+   Watercolour on aged parchment for imagery. Fonts stay Inter.
+   ============================================================ */
+:root {
+  --bg: #0e0e10;                       /* ink */
+  --panel: rgba(18, 17, 19, 0.78);
+  --panel-solid: #141316;
+  --raise: rgba(236, 230, 220, 0.035);
+  --raise-2: rgba(236, 230, 220, 0.07);
+  --line: #27272d;                     /* rule */
+  --line-2: #3a3a42;                   /* rule-strong */
+  --text: #ece6dc;                     /* warm newsprint white */
+  --muted: #b6afa3;                    /* type-dim */
+  --dim: #827d73;                      /* muted */
+  --lux: #f0a23c;                      /* amber lamplight */
+  --lux-soft: #caa26a;
+  --ember: #ff6b35;                    /* hot accent, sparingly */
+  --accent: #f0a23c;
+  --sel-fill: rgba(240, 162, 60, .13);
+  --grad: linear-gradient(135deg, #f7c06a 0%, #f0a23c 48%, #d9772f 100%);
+  --ok: #a8c38f;
+  --err: #ff6b35;
+  --r: 8px;
+}
+
+body { background: var(--bg); }
+
+/* lamplight pooling at the top + vignette, replaces the coloured glows */
+.glow { display: none; }
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(120% 70% at 50% -18%, rgba(240,162,60,.10), rgba(240,162,60,0) 60%),
+    radial-gradient(60% 40% at 85% 110%, rgba(255,107,53,.05), transparent 70%),
+    radial-gradient(140% 100% at 50% 50%, transparent 55%, rgba(0,0,0,.45) 100%);
+}
+/* fine paper grain, like printed newsprint */
+body::after {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 40; opacity: .05; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+::selection { background: rgba(240,162,60,.35); }
+
+/* ---- brand: candle in the dark ---- */
+.sidebar { background: rgba(10,10,12,.72); }
+.logo { background: radial-gradient(circle at 50% 70%, #3a2614 0%, #17110b 70%); box-shadow: 0 0 0 1px #3a3a42, 0 6px 26px -6px rgba(240,162,60,.55); }
+.logo svg { width: 22px; height: 22px; stroke: none; }
+.brand-name { font-weight: 800; letter-spacing: .01em; }
+.brand-name .lux-word { color: var(--lux); }
+.brand-sub { font-style: italic; color: var(--lux-soft); letter-spacing: .02em; }
+.license { font-style: italic; }
+nav a.active { background: rgba(240,162,60,.08); box-shadow: inset 2px 0 0 var(--lux); color: var(--text); }
+.new-badge { background: transparent; color: var(--ember); border: 1px solid rgba(255,107,53,.5); border-radius: 3px; }
+.engine.ok .dot { background: var(--lux); box-shadow: 0 0 0 3px rgba(240,162,60,.18), 0 0 10px rgba(240,162,60,.6); }
+
+/* ---- broadsheet typography: kickers and rules ---- */
+label, .label-row label, .chip-group .gname, .lx-mode-model, .d-sec h4 { color: var(--dim); letter-spacing: .16em; }
+.lx-kicker {
+  background: none; -webkit-background-clip: initial; background-clip: initial; color: var(--ember);
+  display: inline-flex; align-items: center; gap: 9px; letter-spacing: .2em;
+}
+.lx-kicker::before { content: ""; width: 22px; height: 2px; background: var(--ember); }
+.ws-head { border-bottom: 1px solid var(--line); padding-bottom: 14px; }
+.ws-head h1, .lx-hero h1, .lx-title h1, .d-title { color: var(--text); }
+.ws-head::after { content: none; }
+.lx-hero { border-bottom: 1px solid var(--text); box-shadow: 0 -3px 0 -0px transparent; padding-bottom: 28px; margin-bottom: 26px; position: relative; }
+.lx-hero::after { content: ""; position: absolute; left: 0; right: 0; bottom: -5px; border-top: 1px solid var(--line-2); }
+.lx-hero h1 .lux-word { color: var(--lux); }
+.lx-hero .motto { display: block; margin-top: 14px; font-style: italic; color: var(--lux-soft); font-size: 15px; }
+.lx-orb { background: radial-gradient(circle, rgba(240,162,60,.55), rgba(255,107,53,.15) 45%, transparent 70%); filter: blur(30px); opacity: .55; animation: flicker 4.5s ease-in-out infinite; }
+@keyframes flicker { 0%,100% { opacity: .5; transform: scale(1); } 45% { opacity: .62; transform: scale(1.04); } 60% { opacity: .46; transform: scale(.98); } }
+
+/* ---- controls ---- */
+input, textarea { background: rgba(0,0,0,.32); border-color: var(--line); }
+input:focus, textarea:focus { border-color: rgba(240,162,60,.55); box-shadow: 0 0 0 3px rgba(240,162,60,.14); }
+.title-input::placeholder { color: #45403a; }
+.chip, .tagbar button { border-radius: 3px; }
+.chip.on { background: rgba(240,162,60,.14); border-color: rgba(240,162,60,.55); color: #f6d39b; }
+.segmented button.on { background: rgba(240,162,60,.10); box-shadow: inset 0 0 0 1px rgba(240,162,60,.45); color: var(--text); }
+input[type=range] { background: linear-gradient(90deg, var(--lux) var(--p, 50%), rgba(236,230,220,.12) var(--p, 50%)); }
+.toggle input:checked + span { background: var(--lux); }
+.badge.grad { background: rgba(240,162,60,.14); color: #f6d39b; border: 1px solid rgba(240,162,60,.35); }
+.badge { border-radius: 3px; }
+
+/* the Create button is the flame */
+.create-btn { color: #1b1206; text-shadow: 0 1px 0 rgba(255,255,255,.25); box-shadow: 0 0 0 1px rgba(255,190,110,.35), 0 10px 34px -8px rgba(240,162,60,.65), inset 0 1px 0 rgba(255,255,255,.35); }
+.create-btn:hover { box-shadow: 0 0 0 1px rgba(255,190,110,.5), 0 14px 46px -8px rgba(255,140,60,.75), inset 0 1px 0 rgba(255,255,255,.35); }
+.create-btn svg { fill: #1b1206; }
+.create-bar { background: linear-gradient(transparent, rgba(16,15,17,.96) 35%); }
+.btn.primary, .play-btn { background: var(--text); border-color: var(--text); color: var(--bg); }
+.btn.lux-cta { background: rgba(240,162,60,.10); border-color: rgba(240,162,60,.45); color: #f6d39b; }
+.lux-btn { color: var(--lux) !important; }
+.shimmer { background: linear-gradient(90deg, var(--muted) 0%, #ffd9a0 50%, var(--muted) 100%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; }
+
+/* ---- images: watercolour on parchment, treated like the paper's photos ---- */
+.cover img, .lx-pick img, .d-hero img, .lx-cover, .p-cover {
+  filter: brightness(.9) contrast(1.06) sepia(.16) saturate(.92);
+}
+.cover, .lx-pick, .lx-cover, .p-cover { box-shadow: 0 2px 12px rgba(0,0,0,.45), inset 0 0 30px rgba(140,100,60,.1); }
+.cover { border-radius: 6px; }
+.d-hero::after { background: linear-gradient(transparent 45%, var(--panel-solid)); }
+.song.playing { background: linear-gradient(90deg, rgba(240,162,60,.10), rgba(240,162,60,.02)); border-color: rgba(240,162,60,.3); }
+.song.gen .cover { background: #17110b; }
+.song.gen .cover::before { background: conic-gradient(from 0deg, transparent, rgba(240,162,60,.85), rgba(255,107,53,.6), transparent 60%); }
+.song.gen .cover::after { background: #141012; }
+.empty .big { background: radial-gradient(circle at 50% 70%, #3a2614, #17110b 70%); box-shadow: 0 0 0 1px #3a3a42, 0 20px 60px -12px rgba(240,162,60,.6); }
+.empty .big svg { color: var(--lux); }
+.d-lyrics b { color: var(--lux); }
+.player { background: rgba(12,11,13,.9); border-top: 1px solid var(--line); }
+
+/* ---- Studio Mode ---- */
+.lx-mode.on { background: linear-gradient(var(--panel-solid), var(--panel-solid)) padding-box, linear-gradient(135deg, #f7c06a, #d9772f) border-box; box-shadow: 0 18px 44px -22px rgba(240,162,60,.7); }
+.lx-pick:hover { border-color: rgba(240,162,60,.45); box-shadow: 0 20px 44px -20px rgba(240,162,60,.55); }
+.lx-track { background: linear-gradient(90deg, color-mix(in srgb, var(--c) 9%, transparent), transparent 42%), var(--raise); }
+.lx-meter i { background: linear-gradient(to top, var(--c), #fff3dc); }
+.lx-split-lane i { box-shadow: 0 0 22px -4px var(--c); }
+.ed-sel-dot { background: var(--lux); box-shadow: 0 0 12px var(--lux); }
+.spinner-ring { border-top-color: var(--lux); }

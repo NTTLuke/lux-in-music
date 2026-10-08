@@ -1,0 +1,528 @@
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = (s) => { s = Math.max(0, Math.round(s || 0)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+const ICON = {
+  play: '<path d="M7 4l13 8-13 8z"/>',
+  pause: '<path d="M7 4h3v16H7zM14 4h3v16h-3z"/>',
+};
+
+/* ---------- static config ---------- */
+
+const SECTIONS = ["Intro", "Verse", "Pre-Chorus", "Chorus", "Bridge", "Outro"];
+const CHIPS = {
+  Genre: ["pop", "indie pop", "rock", "hip hop", "r&b", "electronic", "synthwave", "lo-fi", "jazz", "funk", "folk", "country", "metal", "soul", "house", "reggae", "cinematic"],
+  Mood: ["uplifting", "melancholic", "dreamy", "energetic", "romantic", "dark", "chill", "epic", "nostalgic"],
+  Instr: ["acoustic guitar", "electric guitar", "piano", "warm Rhodes", "synth pads", "808 bass", "strings", "brass", "soft drums", "punchy drums"],
+  Vocal: ["female vocal", "male vocal", "airy vocal", "raspy vocal", "choir harmonies"],
+  Mix: ["polished demo mix", "lo-fi tape", "wide stereo", "live band feel", "radio ready"],
+};
+const SLIDERS = [
+  { id: "num_inference_steps", label: "Steps", min: 2, max: 32, step: 1, def: 8 },
+  { id: "guidance_scale", label: "Guidance", min: 0.8, max: 3, step: 0.01, def: null, defLabel: "auto" },
+  { id: "semantic_temperature", label: "Temperature", min: 0.5, max: 1.5, step: 0.05, def: 1.0 },
+  { id: "semantic_top_p", label: "Top-p", min: 0.5, max: 1, step: 0.01, def: 0.95 },
+  { id: "semantic_top_k", label: "Top-k", min: 10, max: 300, step: 5, def: 100 },
+  { id: "semantic_repetition_penalty", label: "Repetition", min: 1, max: 1.6, step: 0.01, def: 1.2 },
+];
+
+/* ---------- state ---------- */
+
+const state = { library: [], jobs: [], current: null, adv: {}, cot: "off", variations: 1, jobsAt: 0 };
+const audio = $("audio");
+
+/* ---------- generative covers ---------- */
+
+const coverCache = new Map();
+function hash(str) { let h = 2166136261; for (const c of str) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+function rng(seed) { return () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const PIGMENTS = ["#d9a441", "#3f5f8a", "#7f9f72", "#8e6a8f", "#b5552e", "#4f8a8b", "#c98a3a", "#5a6f9e"];
+function cover(key, size = 256) {
+  // Watercolour on aged parchment, after the Lux In Tenebris illustrations.
+  const k = key + size;
+  if (coverCache.has(k)) return coverCache.get(k);
+  const r = rng(hash(key)), c = document.createElement("canvas");
+  c.width = c.height = size;
+  const g = c.getContext("2d"), S = size, u = S / 256;
+  const pick = () => PIGMENTS[Math.floor(r() * PIGMENTS.length)];
+  const rgba = (hex, a) => `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)},${a})`;
+
+  // parchment
+  const base = g.createLinearGradient(0, 0, S, S);
+  base.addColorStop(0, "#efe3c8"); base.addColorStop(1, "#dcc8a2");
+  g.fillStyle = base; g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 7; i++) {           // mottling
+    const x = r() * S, y = r() * S, rad = S * (0.15 + r() * 0.35), m = g.createRadialGradient(x, y, 0, x, y, rad);
+    m.addColorStop(0, `rgba(120,85,45,${0.05 + r() * 0.07})`); m.addColorStop(1, "rgba(120,85,45,0)");
+    g.fillStyle = m; g.fillRect(0, 0, S, S);
+  }
+  const night = r() < 0.32;               // "in tenebris": darkness above, a candle's light
+  if (night) {
+    const d = g.createLinearGradient(0, 0, 0, S);
+    d.addColorStop(0, "rgba(22,16,12,.97)"); d.addColorStop(0.55, "rgba(30,22,16,.85)"); d.addColorStop(0.85, "rgba(60,42,25,.25)"); d.addColorStop(1, "rgba(60,42,25,0)");
+    g.fillStyle = d; g.fillRect(0, 0, S, S);
+  }
+
+  // watercolour blots: many translucent, jittered layers bleed like wet pigment
+  const blots = 3 + Math.floor(r() * 3);
+  for (let b = 0; b < blots; b++) {
+    const col = pick(), cx = S * (0.15 + r() * 0.7), cy = S * (night ? 0.45 + r() * 0.4 : 0.2 + r() * 0.6), R = S * (0.16 + r() * 0.22);
+    // smooth organic outline: a few low-frequency sines, no spikes
+    const harm = Array.from({ length: 4 }, (_, h) => ({ a: (0.05 + r() * 0.12) / (h + 1), f: h + 2, p: r() * 6 }));
+    const radius = (t) => 1 + harm.reduce((acc, h) => acc + h.a * Math.sin(h.f * t + h.p), 0);
+    const blob = (scale, dx, dy) => {
+      const P = 36, pts = [];
+      for (let i = 0; i < P; i++) { const t = (i / P) * Math.PI * 2, rr = R * scale * radius(t); pts.push([cx + dx + Math.cos(t) * rr * 1.25, cy + dy + Math.sin(t) * rr * 0.85]); }
+      g.beginPath();
+      const mid = (p, q) => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+      let m0 = mid(pts[P - 1], pts[0]); g.moveTo(m0[0], m0[1]);
+      for (let i = 0; i < P; i++) { const m = mid(pts[i], pts[(i + 1) % P]); g.quadraticCurveTo(pts[i][0], pts[i][1], m[0], m[1]); }
+      g.closePath();
+    };
+    for (let layer = 0; layer < 16; layer++) {          // wet layers drifting slightly, like bleeding pigment
+      blob(1.05 - layer * 0.035, (r() - 0.5) * R * 0.12, (r() - 0.5) * R * 0.1);
+      g.fillStyle = rgba(col, 0.068); g.fill();
+    }
+    const bloom = g.createRadialGradient(cx, cy, 0, cx, cy, R);  // lighter centre, darker rim
+    bloom.addColorStop(0, "rgba(245,235,215,.18)"); bloom.addColorStop(1, "rgba(245,235,215,0)");
+    blob(0.9, 0, 0); g.fillStyle = bloom; g.fill();
+    blob(1.05, 0, 0);
+    g.strokeStyle = rgba(col, 0.22); g.lineWidth = 1.2 * u; g.stroke();     // pigment edge
+    for (let d = 0; d < 1 + Math.floor(r() * 3); d++) {                   // drips
+      const x = cx + (r() - 0.5) * R * 1.4, y0 = cy + R * 0.55, len = S * (0.08 + r() * 0.22);
+      g.strokeStyle = rgba(col, 0.35); g.lineWidth = (0.8 + r() * 1.4) * u;
+      g.beginPath(); g.moveTo(x, y0); g.lineTo(x + (r() - 0.5) * 2 * u, y0 + len); g.stroke();
+      g.fillStyle = rgba(col, 0.4); g.beginPath(); g.arc(x, y0 + len, 1.6 * u, 0, 7); g.fill();
+    }
+  }
+
+  // candle glow for night covers
+  if (night) {
+    const x = S * (0.3 + r() * 0.4), y = S * (0.3 + r() * 0.15);
+    const glow = g.createRadialGradient(x, y, 0, x, y, S * 0.42);
+    glow.addColorStop(0, "rgba(255,214,140,.75)"); glow.addColorStop(0.18, "rgba(240,162,60,.35)"); glow.addColorStop(1, "rgba(240,162,60,0)");
+    g.globalCompositeOperation = "screen"; g.fillStyle = glow; g.fillRect(0, 0, S, S); g.globalCompositeOperation = "source-over";
+    g.fillStyle = "rgba(255,240,200,.95)"; g.beginPath(); g.ellipse(x, y, 2.6 * u, 6 * u, 0, 0, 7); g.fill();
+    for (let i = 0; i < 26; i++) { g.fillStyle = `rgba(255,${190 + r() * 50},120,${0.3 + r() * 0.6})`; g.beginPath(); g.arc(x + (r() - 0.5) * S * 0.6, y - r() * S * 0.3, r() * 1.4 * u, 0, 7); g.fill(); }
+  }
+
+  // sepia ink: a flowing music staff with a few notes
+  const ink = night ? "rgba(236,214,170," : "rgba(74,52,36,";
+  const amp = S * (0.04 + r() * 0.07), f = 0.6 + r() * 1.4, ph = r() * 6, y0 = S * (0.35 + r() * 0.35), tilt = (r() - 0.5) * 0.35;
+  const staffY = (x, line) => y0 + line * 4.2 * u + Math.sin((x / S) * Math.PI * 2 * f + ph) * amp + (x - S / 2) * tilt;
+  g.lineWidth = 0.7 * u;
+  for (let line = 0; line < 5; line++) {
+    g.strokeStyle = ink + "0.55)"; g.beginPath();
+    for (let x = -4; x <= S + 4; x += 3) { const y = staffY(x, line) + (r() - 0.5) * 0.5 * u; x < 0 ? g.moveTo(x, y) : g.lineTo(x, y); }
+    g.stroke();
+  }
+  const notes = 3 + Math.floor(r() * 5);
+  for (let i = 0; i < notes; i++) {
+    const x = S * (0.1 + r() * 0.8), y = staffY(x, Math.floor(r() * 5)) - 2 * u;
+    g.fillStyle = ink + "0.75)"; g.beginPath(); g.ellipse(x, y, 2.6 * u, 1.8 * u, -0.4, 0, 7); g.fill();
+    g.strokeStyle = ink + "0.7)"; g.lineWidth = 0.8 * u; g.beginPath(); g.moveTo(x + 2.3 * u, y); g.lineTo(x + 2.3 * u, y - 12 * u); g.stroke();
+  }
+  for (let i = 0; i < 2; i++) {          // loose ink flourishes
+    g.strokeStyle = ink + "0.35)"; g.lineWidth = 0.6 * u; g.beginPath();
+    let x = r() * S, y = r() * S; g.moveTo(x, y);
+    for (let k2 = 0; k2 < 3; k2++) { const nx = r() * S, ny = r() * S; g.bezierCurveTo(r() * S, r() * S, r() * S, r() * S, nx, ny); }
+    g.stroke();
+  }
+
+  // coffee ring + splatter
+  if (r() < 0.6) {
+    const x = S * (0.15 + r() * 0.7), y = S * (0.55 + r() * 0.35), rad = S * (0.06 + r() * 0.06);
+    g.strokeStyle = "rgba(120,80,40,.22)"; g.lineWidth = 1.6 * u; g.beginPath(); g.arc(x, y, rad, r() * 6, r() * 6 + 5.2); g.stroke();
+    const st = g.createRadialGradient(x, y, rad * 0.2, x, y, rad); st.addColorStop(0, "rgba(140,95,50,.0)"); st.addColorStop(1, "rgba(140,95,50,.08)");
+    g.fillStyle = st; g.beginPath(); g.arc(x, y, rad, 0, 7); g.fill();
+  }
+  for (let i = 0; i < 40; i++) { g.fillStyle = rgba(pick(), 0.25 + r() * 0.4); g.beginPath(); g.arc(r() * S, r() * S, r() * 1.8 * u, 0, 7); g.fill(); }
+
+  // burnt edges + grain
+  const v = g.createRadialGradient(S / 2, S / 2, S * 0.38, S / 2, S / 2, S * 0.75);
+  v.addColorStop(0, "rgba(70,45,20,0)"); v.addColorStop(1, "rgba(70,45,20,.38)");
+  g.fillStyle = v; g.fillRect(0, 0, S, S);
+  const img = g.getImageData(0, 0, S, S), d = img.data;
+  for (let i = 0; i < d.length; i += 4) { const n = (r() - 0.5) * 14; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
+  g.putImageData(img, 0, 0);
+
+  const url = c.toDataURL("image/jpeg", 0.9);
+  coverCache.set(k, url);
+  return url;
+}
+
+/* ---------- waveform ---------- */
+
+function drawWave(canvas, peaks, progress = 0, opts = {}) {
+  if (!canvas || !peaks || !peaks.length) return;
+  const dpr = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
+  if (!w) return;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const g = canvas.getContext("2d"); g.scale(dpr, dpr);
+  const gap = opts.gap ?? 2, bar = opts.bar ?? 2, n = Math.max(1, Math.floor(w / (bar + gap)));
+  const grad = g.createLinearGradient(0, 0, w, 0);
+  grad.addColorStop(0, "#caa26a"); grad.addColorStop(0.55, "#f0a23c"); grad.addColorStop(1, "#ff6b35");
+  for (let i = 0; i < n; i++) {
+    const p = peaks[Math.floor((i / n) * peaks.length)] || 0;
+    const bh = Math.max(2, p * h * 0.95), x = i * (bar + gap), y = (h - bh) / 2;
+    g.fillStyle = i / n < progress ? grad : (opts.dim || "rgba(236,230,220,.2)");
+    g.beginPath(); g.roundRect ? g.roundRect(x, y, bar, bh, bar / 2) : g.rect(x, y, bar, bh); g.fill();
+  }
+}
+
+/* ---------- create form ---------- */
+
+function setupForm() {
+  $("section-tags").innerHTML = SECTIONS.map((s) => `<button type="button" data-s="${s}">[${s}]</button>`).join("");
+  $("section-tags").onclick = (e) => {
+    const s = e.target.dataset.s; if (!s) return;
+    const ta = $("lyrics"), pos = ta.selectionStart, before = ta.value.slice(0, pos);
+    const ins = (before && !before.endsWith("\n\n") ? (before.endsWith("\n") ? "\n" : "\n\n") : "") + `[${s}]\n`;
+    ta.setRangeText(ins, pos, ta.selectionEnd, "end"); ta.focus(); updateLyricsCount();
+  };
+  $("lyrics").oninput = updateLyricsCount; updateLyricsCount();
+
+  $("chips").innerHTML = Object.entries(CHIPS).map(([g, list]) =>
+    `<div class="chip-group"><span class="gname">${g}</span>${list.map((c) => `<button type="button" class="chip" data-c="${esc(c)}">${esc(c)}</button>`).join("")}</div>`).join("");
+  $("chips").onclick = (e) => { const c = e.target.dataset.c; if (c) toggleStyleTag(c); };
+  $("style").oninput = syncChips; syncChips();
+  $("style-clear").onclick = () => { $("style").value = "English, "; syncChips(); $("style").focus(); };
+
+  const len = $("len");
+  len.oninput = () => { $("len-val").textContent = fmt(len.value); paintRange(len); };
+  len.oninput();
+
+  segmented("cot", (v) => (state.cot = v));
+  segmented("variations", (v) => { state.variations = Number(v); updateGoLabel(); });
+
+  $("seed-random").onchange = () => { $("seed").disabled = $("seed-random").checked; };
+  $("dice").onclick = () => { $("seed").value = Math.floor(Math.random() * 2 ** 31); };
+
+  $("sliders").innerHTML = SLIDERS.map((s) => `
+    <div class="slider"><div class="label-row"><label for="${s.id}">${s.label}</label><span class="value default" id="${s.id}-v">${s.defLabel || s.def}</span></div>
+    <input type="range" id="${s.id}" min="${s.min}" max="${s.max}" step="${s.step}" value="${s.def ?? s.min}"></div>`).join("");
+  for (const s of SLIDERS) {
+    const el = $(s.id); paintRange(el);
+    el.oninput = () => { state.adv[s.id] = Number(el.value); $(`${s.id}-v`).textContent = el.value; $(`${s.id}-v`).classList.remove("default"); paintRange(el); };
+  }
+  $("adv-reset").onclick = (e) => { e.preventDefault(); resetAdvanced(); };
+
+  $("form").onsubmit = submit;
+  updateGoLabel();
+}
+
+function segmented(id, onChange) {
+  $(id).onclick = (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    for (const x of $(id).children) x.classList.toggle("on", x === b);
+    onChange(b.dataset.v);
+  };
+}
+function setSegmented(id, v) { for (const x of $(id).children) x.classList.toggle("on", x.dataset.v === String(v)); }
+function paintRange(el) { el.style.setProperty("--p", `${((el.value - el.min) / (el.max - el.min)) * 100}%`); }
+function updateLyricsCount() {
+  const v = $("lyrics").value, lines = v.split("\n").filter((l) => l.trim() && !/^\[.*\]$/.test(l.trim())).length;
+  $("lyrics-count").textContent = `${lines} lines · ${v.length} chars`;
+}
+function styleTags() { return $("style").value.split(",").map((t) => t.trim()).filter(Boolean); }
+function toggleStyleTag(tag) {
+  const tags = styleTags(), i = tags.findIndex((t) => t.toLowerCase() === tag.toLowerCase());
+  if (i >= 0) tags.splice(i, 1); else tags.push(tag);
+  $("style").value = tags.join(", "); syncChips();
+}
+function syncChips() {
+  const set = new Set(styleTags().map((t) => t.toLowerCase()));
+  for (const c of document.querySelectorAll(".chip")) c.classList.toggle("on", set.has(c.dataset.c.toLowerCase()));
+}
+function resetAdvanced() {
+  state.adv = {};
+  for (const s of SLIDERS) { const el = $(s.id); el.value = s.def ?? s.min; paintRange(el); const v = $(`${s.id}-v`); v.textContent = s.defLabel || s.def; v.classList.add("default"); }
+  $("abc").value = "";
+}
+function updateGoLabel() { $("go-label").textContent = state.variations > 1 ? `Create ${state.variations} variations` : "Create"; }
+
+async function submit(e) {
+  e.preventDefault();
+  $("form-error").textContent = "";
+  const base = {
+    title: $("title").value.trim() || undefined,
+    lyrics: $("lyrics").value, style: $("style").value, cot: state.cot,
+    max_duration_s: Number($("len").value), ...state.adv,
+  };
+  if ($("abc").value.trim()) base.abc = $("abc").value;
+  const random = $("seed-random").checked, seed0 = Number($("seed").value);
+  $("go").disabled = true;
+  try {
+    for (let i = 0; i < state.variations; i++) {
+      const seed = random ? Math.floor(Math.random() * 2 ** 31) : seed0 + i;
+      const r = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...base, seed }) });
+      if (!r.ok) {
+        const d = (await r.json()).detail;
+        $("form-error").textContent = Array.isArray(d) ? d.map((x) => `${x.loc.slice(1).join(".") || "request"}: ${x.msg}`).join("\n") : String(d);
+        break;
+      }
+    }
+  } finally { $("go").disabled = false; }
+  pollJobs();
+}
+
+function loadIntoForm(p) {
+  $("title").value = p.title || "";
+  $("lyrics").value = p.lyrics || ""; updateLyricsCount();
+  $("style").value = p.style || ""; syncChips();
+  state.cot = p.cot || "off"; setSegmented("cot", state.cot);
+  $("len").value = p.max_duration_s || Math.round((p.semantic_max_tokens || 1500) / 25); $("len").oninput();
+  $("seed-random").checked = false; $("seed").disabled = false; $("seed").value = p.seed ?? 1234;
+  resetAdvanced();
+  for (const s of SLIDERS) if (p[s.id] != null) { const el = $(s.id); el.value = p[s.id]; el.oninput(); }
+  $("abc").value = p.abc || "";
+  document.querySelector(".create").scrollTo({ top: 0, behavior: "smooth" });
+  $("title").focus();
+}
+
+/* ---------- list rendering ---------- */
+
+function tagsHtml(style) { return style.split(",").map((t) => t.trim()).filter(Boolean).map((t) => `<span>${esc(t)}</span>`).join(""); }
+function cotBadge(cot) { return cot === "off" ? "" : `<span class="badge grad">${cot === "full" ? "score" : "melody"}</span>`; }
+
+function render() {
+  const q = $("search").value.trim().toLowerCase();
+  const rank = { running: 0, queued: 1, error: 2 };
+  const active = state.jobs.filter((j) => j.status !== "done" && (j.kind || "generate") === "generate")
+    .sort((a, b) => rank[a.status] - rank[b.status] || a.created - b.created);
+  const songs = state.library.filter((s) => !q || [s.title, s.params.style, s.params.lyrics].join(" ").toLowerCase().includes(q));
+  $("lib-count").textContent = state.library.length;
+
+  if (!active.length && !songs.length) {
+    $("list").innerHTML = q ? `<div class="empty"><h3>No matches</h3>Try another search.</div>` :
+      `<div class="empty"><div class="big"><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
+       <h3>Your first song is one click away</h3>Write some lyrics, pick a style, hit Create.</div>`;
+    return;
+  }
+  const jobRows = active.map((j) => {
+    const title = esc(j.params.title || "Untitled");
+    if (j.status === "error") return `
+      <div class="song err" data-job="${j.id}">
+        <div class="cover"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h0"/></svg></div>
+        <div class="s-main"><div class="s-title">${title}</div><div class="s-sub" title="${esc(j.error)}">Failed: ${esc(j.error)}</div></div>
+        <div class="s-actions" style="opacity:1"><button class="icon-btn" data-act="dismiss" title="Dismiss"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      </div>`;
+    const running = j.status === "running";
+    return `
+      <div class="song gen ${running ? "" : "queued"}" data-job="${j.id}">
+        <div class="cover">${running ? '<div class="eq"><i></i><i></i><i></i><i></i></div>' : ""}</div>
+        <div class="s-main"><div class="s-title">${title}${cotBadge(j.params.cot)}</div>
+          <div class="s-tags">${tagsHtml(j.params.style)}</div>
+          <div class="s-sub ${running ? "shimmer" : ""}" data-elapsed>${running ? "Generating…" : "Waiting in queue"}</div>
+          <div class="progress"><i data-bar style="width:0"></i></div></div>
+      </div>`;
+  }).join("");
+  const songRows = songs.map((s) => `
+    <div class="song ${state.current?.name === s.name ? "playing" : ""}" data-name="${esc(s.name)}">
+      <div class="cover"><img src="${cover(s.name, 128)}" alt=""><div class="ov"><svg viewBox="0 0 24 24">${state.current?.name === s.name && !audio.paused ? ICON.pause : ICON.play}</svg></div><span class="dur">${fmt(s.duration_s)}</span></div>
+      <div class="s-main"><div class="s-title">${esc(s.title)}${cotBadge(s.params.cot)}${s.edit ? `<span class="badge">edit ${fmt(s.edit.start_s)}–${fmt(s.edit.end_s)}</span>` : ""}</div>
+        <div class="s-tags">${tagsHtml(s.params.style)}</div>
+        <div class="s-sub">seed ${s.params.seed} · made in ${fmt(s.elapsed_s)} · ${esc((s.created || "").replace("T", " ").slice(0, 16))}</div></div>
+      <canvas class="mini-wave"></canvas>
+      <div class="s-actions">
+        <button class="icon-btn lux-btn" data-act="lux" title="Open in Studio Mode"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg></button>
+        <button class="icon-btn" data-act="reuse" title="Reuse settings"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0114-5.3L20 9M20 4v5h-5M20 12a8 8 0 01-14 5.3L4 15M4 20v-5h5"/></svg></button>
+        <a class="icon-btn" href="/outputs/${encodeURIComponent(s.name)}.wav" download title="Download WAV"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></a>
+        <button class="icon-btn" data-act="info" title="Details"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button>
+      </div>
+    </div>`).join("");
+  $("list").innerHTML = jobRows + songRows;
+  drawMiniWaves();
+  tickJobs();
+}
+
+function drawMiniWaves() {
+  for (const row of document.querySelectorAll(".song[data-name]")) {
+    const s = state.library.find((x) => x.name === row.dataset.name);
+    const prog = state.current?.name === s.name && audio.duration ? audio.currentTime / audio.duration : 0;
+    drawWave(row.querySelector(".mini-wave"), s.peaks, prog, { bar: 2, gap: 2, dim: "rgba(236,230,220,.14)" });
+  }
+}
+
+$("list").onclick = async (e) => {
+  const row = e.target.closest(".song"); if (!row) return;
+  const act = e.target.closest("[data-act]")?.dataset.act;
+  if (row.dataset.job) {
+    if (act === "dismiss") { await fetch(`/api/jobs/${row.dataset.job}`, { method: "DELETE" }); pollJobs(); }
+    return;
+  }
+  if (e.target.closest("a")) return;
+  const s = state.library.find((x) => x.name === row.dataset.name);
+  if (act === "reuse") return loadIntoForm(s.params);
+  if (act === "lux") return Lux.open(s.name);
+  if (act === "info") return openDrawer(s);
+  togglePlay(s);
+};
+$("search").oninput = render;
+
+
+/* ---------- jobs polling ---------- */
+
+let pollTimer;
+async function pollJobs() {
+  clearTimeout(pollTimer);
+  try {
+    const jobs = await (await fetch("/api/jobs")).json();
+    const doneBefore = state.jobs.filter((j) => j.status === "done" && j.kind !== "separate").length;
+    const changed = JSON.stringify(jobs.map((j) => [j.id, j.status])) !== JSON.stringify(state.jobs.map((j) => [j.id, j.status]));
+    state.jobs = jobs; state.jobsAt = Date.now();
+    if (window.Lux) Lux.onJobs(jobs);
+    if (jobs.filter((j) => j.status === "done" && j.kind !== "separate").length !== doneBefore) await loadLibrary(true);
+    else if (changed) render();
+  } catch { /* studio restarting */ }
+  const busy = state.jobs.some((j) => j.status === "running" || j.status === "queued");
+  pollTimer = setTimeout(pollJobs, busy ? 1000 : 4000);
+}
+function tickJobs() {
+  for (const j of state.jobs) {
+    if (j.status !== "running") continue;
+    const row = document.querySelector(`.song[data-job="${j.id}"]`); if (!row) continue;
+    const elapsed = j.now - j.started + (Date.now() - state.jobsAt) / 1000;
+    const pct = Math.min(0.96, elapsed / j.eta_s);
+    row.querySelector("[data-bar]").style.width = `${pct * 100}%`;
+    row.querySelector("[data-elapsed]").textContent = `Generating… ${fmt(elapsed)} / ~${fmt(j.eta_s)}`;
+  }
+}
+setInterval(tickJobs, 250);
+
+async function loadLibrary(autoplayNewest = false) {
+  const before = new Set(state.library.map((s) => s.name));
+  state.library = await (await fetch("/api/library")).json();
+  render();
+  if (window.Lux) Lux.onLibrary();
+  const fresh = state.library.find((s) => !before.has(s.name));
+  if (autoplayNewest && fresh && before.size && audio.paused) { flash(fresh.name); }
+}
+function flash(name) {
+  const row = document.querySelector(`.song[data-name="${CSS.escape(name)}"]`);
+  if (row) { row.animate([{ background: "rgba(240,162,60,.25)" }, { background: "transparent" }], { duration: 1600 }); }
+}
+
+/* ---------- player ---------- */
+
+function setTrack(s) {
+  state.current = s;
+  audio.src = `/outputs/${encodeURIComponent(s.name)}.wav`;
+  $("p-cover").src = cover(s.name, 128);
+  $("p-title").textContent = s.title;
+  $("p-style").textContent = s.params.style;
+  $("p-dl").href = audio.src;
+  $("p-dur").textContent = fmt(s.duration_s);
+  document.title = `${s.title} · Lux In Music`;
+}
+function togglePlay(s) {
+  if (s && state.current?.name !== s.name) { setTrack(s); audio.play(); }
+  else if (state.current) { audio.paused ? audio.play() : audio.pause(); }
+  else if (state.library[0]) { setTrack(state.library[0]); audio.play(); }
+}
+function step(dir) {
+  if (!state.library.length) return;
+  const i = state.library.findIndex((x) => x.name === state.current?.name);
+  const n = state.library[(i + dir + state.library.length) % state.library.length];
+  setTrack(n); audio.play();
+}
+function syncPlayIcons() {
+  $("p-play-icon").innerHTML = audio.paused ? ICON.play : ICON.pause;
+  for (const row of document.querySelectorAll(".song[data-name]")) {
+    const on = state.current?.name === row.dataset.name;
+    row.classList.toggle("playing", on);
+    row.querySelector(".ov svg").innerHTML = on && !audio.paused ? ICON.pause : ICON.play;
+  }
+  const dp = document.querySelector("#drawer [data-act=dplay] svg");
+  if (dp) dp.innerHTML = state.drawerSong?.name === state.current?.name && !audio.paused ? ICON.pause : ICON.play;
+}
+function drawPlayer() {
+  const prog = audio.duration ? audio.currentTime / audio.duration : 0;
+  drawWave($("p-wave"), state.current?.peaks, prog, { bar: 3, gap: 2 });
+  $("p-cur").textContent = fmt(audio.currentTime);
+  const row = state.current && document.querySelector(`.song[data-name="${CSS.escape(state.current.name)}"] .mini-wave`);
+  if (row) drawWave(row, state.current.peaks, prog, { bar: 2, gap: 2, dim: "rgba(236,230,220,.14)" });
+}
+audio.addEventListener("play", () => { syncPlayIcons(); if (window.Lux) Lux.pause(); });
+audio.addEventListener("pause", syncPlayIcons);
+audio.addEventListener("timeupdate", drawPlayer);
+audio.addEventListener("loadedmetadata", () => { $("p-dur").textContent = fmt(audio.duration); drawPlayer(); });
+audio.addEventListener("ended", () => step(1));
+$("p-play").onclick = () => togglePlay();
+$("p-prev").onclick = () => step(-1);
+$("p-next").onclick = () => step(1);
+$("p-vol").oninput = (e) => { audio.volume = e.target.value; paintRange(e.target); };
+audio.volume = 0.9; paintRange($("p-vol"));
+$("p-wave").onclick = (e) => {
+  if (!audio.duration) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  audio.currentTime = ((e.clientX - r.left) / r.width) * audio.duration;
+};
+document.addEventListener("keydown", (e) => {
+  if (e.target.matches("input, textarea")) return;
+  if (e.code === "Space") { e.preventDefault(); if (window.Lux && Lux.visible()) Lux.toggle(); else togglePlay(); }
+  if (e.key === "Escape") closeDrawer();
+  if (e.key === "ArrowRight" && audio.duration) audio.currentTime += 5;
+  if (e.key === "ArrowLeft" && audio.duration) audio.currentTime -= 5;
+});
+window.addEventListener("resize", () => { drawPlayer(); drawMiniWaves(); });
+
+/* ---------- drawer ---------- */
+
+async function openDrawer(s) {
+  state.drawerSong = s;
+  const p = s.params;
+  const lyr = esc(p.lyrics).replace(/^\[(.+?)\]$/gm, "<b>[$1]</b>");
+  let abc = "";
+  if (s.artifacts?.score) {
+    try { abc = await (await fetch(`/outputs/${encodeURIComponent(s.artifacts.score)}`)).text(); } catch { abc = ""; }
+  }
+  const kv = [["Length", fmt(s.duration_s)], ["Planning", p.cot], ["Seed", p.seed], ["Made in", fmt(s.elapsed_s)],
+    ["Sample rate", `${s.sample_rate / 1000} kHz · ${s.channels === 2 ? "stereo" : "mono"}`], ["Created", (s.created || "").replace("T", " ").slice(0, 16)],
+    ...SLIDERS.filter((x) => p[x.id] != null).map((x) => [x.label, p[x.id]])];
+  $("drawer").innerHTML = `
+    <div class="d-hero"><img src="${cover(s.name, 512)}" alt=""><button class="icon-btn d-close" data-act="close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="d-body">
+      <div><h2 class="d-title">${esc(s.title)}</h2><div class="d-style">${esc(p.style)}</div></div>
+      <div class="d-actions">
+        <button class="btn primary" data-act="dplay"><svg viewBox="0 0 24 24">${ICON.play}</svg>Play</button>
+        <button class="btn lux-cta" data-act="dlux"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Open in Studio Mode</button>
+        <button class="btn" data-act="dreuse"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0114-5.3L20 9M20 4v5h-5"/></svg>Reuse settings</button>
+        <a class="btn" href="/outputs/${encodeURIComponent(s.name)}.wav" download><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>WAV</a>
+        ${s.artifacts?.score ? `<a class="btn" href="/outputs/${encodeURIComponent(s.artifacts.score)}" download><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/></svg>Score</a>` : ""}
+      </div>
+      <div class="d-sec"><h4>Lyrics</h4><div class="d-lyrics">${lyr}</div></div>
+      <div class="d-sec"><h4>Generation</h4><div class="kv">${kv.map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("")}</div></div>
+      ${abc ? `<div class="d-sec"><h4>Generated score (ABC)</h4><pre class="abc">${esc(abc)}</pre></div>` : ""}
+    </div>`;
+  $("drawer").classList.add("open"); $("drawer-bg").classList.add("open");
+  syncPlayIcons();
+}
+function closeDrawer() { $("drawer").classList.remove("open"); $("drawer-bg").classList.remove("open"); }
+$("drawer-bg").onclick = closeDrawer;
+$("drawer").onclick = (e) => {
+  const act = e.target.closest("[data-act]")?.dataset.act, s = state.drawerSong;
+  if (act === "close") closeDrawer();
+  if (act === "dplay") togglePlay(s);
+  if (act === "dreuse") { closeDrawer(); loadIntoForm(s.params); }
+  if (act === "dlux") { closeDrawer(); Lux.open(s.name); }
+};
+
+/* ---------- engine health ---------- */
+
+async function health() {
+  try {
+    const h = await (await fetch("/api/health")).json();
+    $("engine").className = `engine ${h.engine === "ok" ? "ok" : "down"}`;
+    $("engine-text").textContent = h.engine === "ok" ? `Engine ready · ${h.backend}` : "Engine offline";
+    $("engine").title = h.engine === "ok" ? "audio.cpp is running" : "Start it with ./studio.sh";
+  } catch { $("engine").className = "engine down"; $("engine-text").textContent = "Studio offline"; }
+}
+
+/* ---------- boot ---------- */
+
+setupForm();
+loadLibrary();
+pollJobs();
+health(); setInterval(health, 8000);
