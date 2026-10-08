@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import edit, engine, separate
+from . import engine, separate
 from .params import GenerationParams
 
 STATIC = Path(__file__).parent / "static"
@@ -56,10 +56,6 @@ def _estimate(job: dict) -> float:
         span = params["end_s"] - params["start_s"]
         sep = _sep_speed.get(params.get("mode", "4stems"), 0.5) * (span + 6)
         return 6 + 0.25 * dur + 0.3 * span + sep
-    if job["kind"] == "edit":
-        dur = _song_duration(params["song"])
-        recover = 0 if (engine.OUTPUT_DIR / f"{params['song']}.semantic.json").exists() else 0.25 * dur
-        return 4 + recover + 0.25 * dur + 0.3 * (params["end_s"] - params["start_s"])
     target = params.get("max_duration_s") or params.get("semantic_max_tokens", 9000) / 25
     return _speed["overhead"] + _speed["ratio"] * min(target, 360)
 
@@ -77,11 +73,6 @@ def _worker() -> None:
                 p = job["params"]
                 res = separate.replace_stem(p["song"], p["set_id"], p["stem"], p["start_s"], p["end_s"],
                                             p["seed"], p.get("lyrics"))
-                job.update(status="done", result=res)
-                continue
-            if job["kind"] == "edit":
-                p = job["params"]
-                res = edit.replace_section(p["song"], p["start_s"], p["end_s"], p["seed"], p.get("lyrics"))
                 job.update(status="done", result=res)
                 continue
             if job["kind"] == "separate":
@@ -198,21 +189,6 @@ class EditRequest(BaseModel):
     end_s: float = Field(..., gt=0)
     seed: int = Field(..., ge=0, lt=2**63)
     lyrics: str | None = None
-
-
-@app.post("/api/edit/replace")
-def edit_replace(req: EditRequest):
-    meta_path = engine.OUTPUT_DIR / f"{req.song}.json"
-    if not meta_path.exists():
-        raise HTTPException(404, "song not found")
-    duration = json.loads(meta_path.read_text())["duration_s"]
-    if req.end_s - req.start_s < 1 or req.start_s >= duration:
-        raise HTTPException(422, "select at least 1 second inside the song")
-    job_id = uuid.uuid4().hex[:8]
-    jobs[job_id] = {"id": job_id, "kind": "edit", "status": "queued", "created": time.time(),
-                    "params": {**req.model_dump(exclude_none=True), "end_s": min(req.end_s, duration)}}
-    _queue.put(job_id)
-    return jobs[job_id]
 
 
 class StemEditRequest(EditRequest):

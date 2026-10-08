@@ -30,8 +30,10 @@ const Lux = (() => {
     song: null, sets: [], set: null, view: "pick", mode: "4stems", prompt: "",
     ctx: null, buffers: {}, tracks: [], playing: false, startAt: 0, offset: 0, duration: 0,
     loadingSet: null, raf: 0, master: null,
-    tab: "stems", sel: null, takes: 1, edLyrics: null, stopAt: null,
     laneSel: null, mixStopAt: null, stemTakes: 1, stemLyrics: null,
+    armed: null,        // index of the track in edit mode (set only by its Edit button)
+    listen: "solo",     // Play selection: "solo" = only the armed stem, "mix" = full mix
+    audition: null,     // while auditioning solo, index of the only audible track
   };
 
   /* ---------- routing ---------- */
@@ -54,7 +56,7 @@ const Lux = (() => {
     const name = m[1] ? decodeURIComponent(m[1]) : null;
     if (!name) { L.song = null; stopAudio(); return renderPicker(); }  // re-rendered by onLibrary()
     if (L.song?.name !== name) {
-      stopAudio(); L.set = null; L.buffers = {}; L.sel = null; L.edLyrics = null; L.laneSel = null; L.stemLyrics = null;
+      stopAudio(); L.set = null; L.buffers = {}; L.laneSel = null; L.stemLyrics = null; L.armed = null; L.audition = null;
       if (!state.library.length) await loadLibrary();
       L.song = state.library.find((s) => s.name === name) || null;
       if (!L.song) return renderPicker();
@@ -75,7 +77,6 @@ const Lux = (() => {
 
   function render() {
     if (!L.song) return renderPicker();
-    if (L.tab === "edit") return renderEdit();
     const job = activeJob();
     if (job) return renderProcessing(job);
     if (L.view === "pick" || !L.set) return renderModes();
@@ -91,10 +92,6 @@ const Lux = (() => {
         <div class="lx-title"><div class="lx-kicker">Studio Mode</div><h1>${esc(s.title)}</h1>
           <div class="lx-sub">${esc(s.params.style)}</div></div>
         <div class="lx-head-actions">${extra}</div>
-      </div>
-      <div class="segmented lx-pagetabs">
-        <button class="${L.tab === "stems" ? "on" : ""}" data-lx="tab" data-t="stems"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Stems</button>
-        <button class="${L.tab === "edit" ? "on" : ""}" data-lx="tab" data-t="edit"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg>Replace section</button>
       </div>`;
   }
 
@@ -185,7 +182,7 @@ const Lux = (() => {
         </div>
         <div class="lx-editbar" id="lx-editbar"></div>
         <div class="lx-tracks" id="lx-tracks">${set.stems.map((st, i) => trackRow(st, i)).join("")}</div>
-        <div class="lx-foot"><b class="lx-tip">Tip:</b> drag across a lane to regenerate that part of the stem only. Separated in ${fmt(set.elapsed_s)} with ${esc(MODE_INFO[set.mode].model)}${L.loadingSet ? " · loading audio…" : ""}</div>
+        <div class="lx-foot"><b class="lx-tip">Tip:</b> press <b>Edit</b> on a track, then drag across its lane to regenerate that part of the stem only. Separated in ${fmt(set.elapsed_s)} with ${esc(MODE_INFO[set.mode].model)}${L.loadingSet ? " · loading audio…" : ""}</div>
       </div>`;
     syncTrackUI(); drawLanes(); updateTransport(); renderEditBar();
   }
@@ -198,15 +195,27 @@ const Lux = (() => {
     const running = stemJobs().filter((j) => j.status === "running" || j.status === "queued")
       .sort((x, y) => (x.status === "running" ? -1 : 1) - (y.status === "running" ? -1 : 1) || x.created - y.created);
     const failed = stemJobs().find((j) => j.status === "error" && !j.seen);
-    const ls = L.laneSel, st = ls && L.set.stems[ls.i];
-    if (!ls && !running.length && !failed) { box.innerHTML = ""; return; }
+    const ls = L.laneSel && L.laneSel.i === L.armed ? L.laneSel : null;
+    const st = L.armed != null ? L.set.stems[L.armed] : null;
+    if (!st && !running.length && !failed) { box.innerHTML = ""; return; }
     if (L.stemLyrics == null) L.stemLyrics = L.song.params.lyrics;
     const c = st ? (STEM_COLORS[st.id] || "#f0a23c") : "#f0a23c";
     box.innerHTML = `
+      ${st && !ls ? `<div class="lx-eb waiting" style="--c:${c}">
+        <div class="lx-eb-row">
+          <span class="lx-ticon"><svg viewBox="0 0 24 24">${STEM_ICONS[st.id] || STEM_ICONS.other}</svg></span>
+          <div class="lx-eb-title"><b>Editing ${esc(st.label)}</b><span>Drag across the highlighted ${esc(st.label)} lane to choose the part to regenerate</span></div>
+          <button class="icon-btn" data-lx="eb-clear" title="Stop editing"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        </div></div>` : ""}
       ${ls ? `<div class="lx-eb" style="--c:${c}">
         <div class="lx-eb-row">
           <span class="lx-ticon"><svg viewBox="0 0 24 24">${STEM_ICONS[st.id] || STEM_ICONS.other}</svg></span>
           <div class="lx-eb-title"><b>Regenerate ${esc(st.label)}</b><span>${fmt(ls.a)} – ${fmt(ls.b)} · ${(ls.b - ls.a).toFixed(1)} s · other stems stay as they are</span></div>
+          <div class="lx-eb-listen"><span>Listen</span>
+            <div class="segmented small">
+              <button type="button" data-lx="eb-listen" data-v="solo" class="${L.listen === "solo" ? "on" : ""}" title="Only the ${esc(st.label)} stem">Solo stem</button>
+              <button type="button" data-lx="eb-listen" data-v="mix" class="${L.listen === "mix" ? "on" : ""}" title="All stems, with your mute/solo settings">Full mix</button>
+            </div></div>
           <button class="btn" data-lx="eb-play"><svg viewBox="0 0 24 24">${ICON.play}</svg>Play selection</button>
           <div class="segmented small lx-eb-takes">${[1, 2, 3].map((n) => `<button type="button" data-lx="eb-takes" data-n="${n}" class="${L.stemTakes === n ? "on" : ""}" title="${n} take${n > 1 ? "s" : ""}">${n}×</button>`).join("")}</div>
           <button class="create-btn lx-eb-go" data-lx="eb-go"><svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.8L20 10l-5 3.9L16.5 20 12 16.6 7.5 20 9 13.9 4 10l6.1-1.2z"/></svg>Regenerate</button>
@@ -258,6 +267,7 @@ const Lux = (() => {
             <button class="lx-ms" data-lx="mute" data-i="${i}" title="Mute">M</button>
             <button class="lx-ms" data-lx="solo" data-i="${i}" title="Solo">S</button>
             <input type="range" min="0" max="1.5" step="0.01" value="1" data-lx="vol" data-i="${i}" title="Volume">
+            <button class="lx-edit-btn" data-lx="arm" data-i="${i}" title="Edit a part of ${esc(st.label)}"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg><span>Edit</span></button>
             <a class="icon-btn" href="/outputs/${st.file}" download="${esc(L.song.name)}-${esc(st.id)}.wav" title="Download stem"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></a>
           </div>
         </div>
@@ -270,174 +280,6 @@ const Lux = (() => {
   function hasStem(id) { return L.set?.stems.some((s) => s.id === id); }
 
 
-  /* ---------- replace section ---------- */
-
-  const editJobs = () => state.jobs.filter((j) => j.kind === "edit" && j.params.song === L.song?.name);
-  const takesOf = () => state.library.filter((x) => x.parent === L.song.name);
-
-  function renderEdit() {
-    const s = L.song, dur = s.duration_s, sel = L.sel;
-    const running = editJobs().filter((j) => j.status === "running" || j.status === "queued").sort((x, y) => (x.status === "running" ? -1 : 1) - (y.status === "running" ? -1 : 1) || x.created - y.created);
-    const failed = editJobs().filter((j) => j.status === "error").slice(0, 1);
-    if (L.edLyrics == null) L.edLyrics = s.params.lyrics;
-    const takes = takesOf();
-    el().innerHTML = header() + `
-      <div class="ed">
-        <div class="ed-intro">${sel ? "" : "Drag across the waveform to select the part you want to change. Everything outside the selection stays exactly as it is."}</div>
-        <div class="ed-wave-wrap">
-          <canvas id="ed-wave"></canvas>
-          <div class="ed-ruler">${[0, 0.25, 0.5, 0.75, 1].map((f) => `<span style="left:${f * 100}%">${fmt(f * dur)}</span>`).join("")}</div>
-        </div>
-        <div class="ed-bar">
-          ${sel ? `
-            <div class="ed-sel"><span class="ed-sel-dot"></span><b>${fmt(sel[0])} – ${fmt(sel[1])}</b><span>${(sel[1] - sel[0]).toFixed(1)} s selected</span></div>
-            <button class="btn" data-lx="ed-play"><svg viewBox="0 0 24 24">${ICON.play}</svg>Play selection</button>
-            <button class="btn" data-lx="ed-clear">Clear</button>` : `<div class="ed-sel muted">No selection yet</div>`}
-        </div>
-        <div class="ed-grid ${sel ? "" : "disabled"}">
-          <div class="field">
-            <div class="label-row"><label for="ed-lyrics">Lyrics</label><span class="meta">Change the lines sung in the selection, or leave as is for a new take</span></div>
-            <textarea id="ed-lyrics" rows="7" spellcheck="false">${esc(L.edLyrics)}</textarea>
-          </div>
-          <div class="ed-side">
-            <label>Takes</label>
-            <div class="segmented small" id="ed-takes">${[1, 2, 3].map((n) => `<button type="button" data-lx="ed-takes" data-n="${n}" class="${L.takes === n ? "on" : ""}">${n}</button>`).join("")}</div>
-            <button class="create-btn" data-lx="ed-go" ${sel ? "" : "disabled"}><svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.8L20 10l-5 3.9L16.5 20 12 16.6 7.5 20 9 13.9 4 10l6.1-1.2z"/></svg>Regenerate selection</button>
-            <div class="hint">Each take keeps the song before and after your selection and rewrites only the part in between.</div>
-            <div class="error" id="ed-error">${failed.length ? esc(failed[0].error) : ""}</div>
-          </div>
-        </div>
-        ${running.length ? `<div class="ed-running">${running.map((j) => `
-          <div class="ed-job" data-job="${j.id}"><span class="spinner-ring"></span>
-            <div><b class="${j.status === "running" ? "shimmer" : ""}">${j.status === "running" ? "Rewriting" : "Queued"} ${fmt(j.params.start_s)}–${fmt(j.params.end_s)}</b>
-            <div class="progress"><i data-ed-bar style="width:0"></i></div><span class="meta" data-ed-time></span></div></div>`).join("")}</div>` : ""}
-        <div class="ed-takes">
-          <h3>Takes <span class="meta">${takes.length ? `${takes.length} version${takes.length > 1 ? "s" : ""} of this song` : "your regenerated versions will appear here"}</span></h3>
-          ${takes.map((t) => `
-            <div class="ed-take" data-name="${esc(t.name)}">
-              <button class="play-btn" data-lx="take-play" data-name="${esc(t.name)}" title="Play the change"><svg viewBox="0 0 24 24">${ICON.play}</svg></button>
-              <div class="ed-take-main"><b>${fmt(t.edit.start_s)} – ${fmt(t.edit.end_s)}</b><span class="meta">seed ${t.edit.seed} · made in ${fmt(t.elapsed_s)}${t.params.lyrics !== s.params.lyrics ? " · new lyrics" : ""}</span>
-                <canvas class="ed-take-wave" data-name="${esc(t.name)}"></canvas></div>
-              <div class="ed-take-actions">
-                <button class="btn" data-lx="take-open" data-name="${esc(t.name)}" title="Open this version in Studio Mode to split or edit it further">Open</button>
-                <a class="icon-btn" href="/outputs/${encodeURIComponent(t.name)}.wav" download title="Download WAV"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></a>
-              </div>
-            </div>`).join("")}
-        </div>
-      </div>`;
-    const ta = document.getElementById("ed-lyrics");
-    ta.oninput = () => { L.edLyrics = ta.value; };
-    drawEdit(); drawTakes(); tickEdit();
-  }
-
-  function edProgress() { return state.current?.name === L.song?.name && audio.duration ? audio.currentTime / audio.duration : -1; }
-  function drawEdit() {
-    const cv = document.getElementById("ed-wave"); if (!cv || !L.song) return;
-    const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight; if (!w) return;
-    cv.width = w * dpr; cv.height = h * dpr;
-    const g = cv.getContext("2d"); g.scale(dpr, dpr);
-    const dur = L.song.duration_s, peaks = L.song.peaks, n = Math.floor(w / 3);
-    const [a, b] = L.sel || [-1, -1];
-    const css = getComputedStyle(document.documentElement);
-    const accent = css.getPropertyValue("--accent").trim() || "#f0a23c";
-    if (L.sel) {
-      g.fillStyle = css.getPropertyValue("--sel-fill").trim() || "rgba(168,85,247,.16)";
-      g.fillRect((a / dur) * w, 0, ((b - a) / dur) * w, h);
-    }
-    for (let k = 0; k < n; k++) {
-      const t = (k / n) * dur, p = peaks[Math.floor((k / n) * peaks.length)] || 0, bh = Math.max(2, p * h * 0.82);
-      const inSel = t >= a && t <= b;
-      g.fillStyle = inSel ? accent : "rgba(236,230,220,.26)";
-      g.fillRect(k * 3, (h - bh) / 2, 2, bh);
-    }
-    if (L.sel) {
-      g.fillStyle = accent;
-      for (const t of [a, b]) { const x = (t / dur) * w; g.fillRect(x - 1, 0, 2, h); g.beginPath(); g.arc(x, 7, 5, 0, 7); g.fill(); }
-    }
-    const prog = edProgress();
-    if (prog >= 0) { g.fillStyle = "#fff"; g.fillRect(prog * w, 0, 1.5, h); }
-  }
-  function drawTakes() {
-    document.querySelectorAll(".ed-take-wave").forEach((cv) => {
-      const t = state.library.find((x) => x.name === cv.dataset.name); if (!t) return;
-      const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight; if (!w) return;
-      cv.width = w * dpr; cv.height = h * dpr;
-      const g = cv.getContext("2d"); g.scale(dpr, dpr);
-      const n = Math.floor(w / 3), dur = t.duration_s, accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#f0a23c";
-      const prog = state.current?.name === t.name && audio.duration ? audio.currentTime / audio.duration : -1;
-      for (let k = 0; k < n; k++) {
-        const tt = (k / n) * dur, p = t.peaks[Math.floor((k / n) * t.peaks.length)] || 0, bh = Math.max(1.5, p * h * 0.85);
-        const inSel = tt >= t.edit.start_s && tt <= t.edit.end_s;
-        g.fillStyle = inSel ? accent : "rgba(236,230,220,.18)";
-        g.globalAlpha = prog >= 0 && k / n < prog ? 1 : 0.75;
-        g.fillRect(k * 3, (h - bh) / 2, 2, bh);
-      }
-      g.globalAlpha = 1;
-      if (prog >= 0) { g.fillStyle = "#fff"; g.fillRect(prog * w, 0, 1.5, h); }
-    });
-  }
-  function tickEdit() {
-    if (!visible() || L.tab !== "edit") return;
-    for (const j of editJobs()) {
-      if (j.status !== "running") continue;
-      const row = document.querySelector(`.ed-job[data-job="${j.id}"]`); if (!row) continue;
-      const elapsed = j.now - j.started + (Date.now() - state.jobsAt) / 1000;
-      row.querySelector("[data-ed-bar]").style.width = `${Math.min(96, (elapsed / j.eta_s) * 100)}%`;
-      row.querySelector("[data-ed-time]").textContent = `${fmt(elapsed)} / ~${fmt(j.eta_s)}`;
-    }
-  }
-  setInterval(tickEdit, 250);
-  (function edLoop() {
-    if (visible() && L.tab === "edit" && !audio.paused) { drawEdit(); drawTakes(); }
-    if (L.stopAt != null && !audio.paused && audio.currentTime >= L.stopAt) { audio.pause(); L.stopAt = null; }
-    requestAnimationFrame(edLoop);
-  })();
-
-  function playRange(song, from, to) {
-    if (state.current?.name !== song.name) setTrack(song);
-    const go = () => { audio.currentTime = Math.max(0, from); L.stopAt = to; audio.play(); };
-    if (audio.readyState >= 1) go(); else audio.addEventListener("loadedmetadata", go, { once: true });
-  }
-
-  async function startEdit() {
-    const err = document.getElementById("ed-error"); err.textContent = "";
-    const [a, b] = L.sel;
-    for (let i = 0; i < L.takes; i++) {
-      const body = { song: L.song.name, start_s: +a.toFixed(2), end_s: +b.toFixed(2), seed: Math.floor(Math.random() * 2 ** 31) };
-      if (L.edLyrics && L.edLyrics !== L.song.params.lyrics) body.lyrics = L.edLyrics;
-      const r = await fetch("/api/edit/replace", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      if (!r.ok) { const d = (await r.json()).detail; err.textContent = typeof d === "string" ? d : JSON.stringify(d); return; }
-      const job = await r.json();
-      state.jobs = [{ ...job, now: Date.now() / 1000 }, ...state.jobs];
-    }
-    renderEdit(); pollJobs();
-  }
-
-  // drag-to-select on the edit waveform
-  let drag = null;
-  document.addEventListener("pointerdown", (e) => {
-    const cv = e.target.closest("#ed-wave"); if (!cv) return;
-    const r = cv.getBoundingClientRect(), dur = L.song.duration_s;
-    const t = Math.max(0, Math.min(dur, ((e.clientX - r.left) / r.width) * dur));
-    drag = { t0: t, x0: e.clientX, r, dur, prev: L.sel };
-    cv.setPointerCapture(e.pointerId);
-  });
-  document.addEventListener("pointermove", (e) => {
-    if (!drag || Math.abs(e.clientX - drag.x0) < 4) return;
-    const t = Math.max(0, Math.min(drag.dur, ((e.clientX - drag.r.left) / drag.r.width) * drag.dur));
-    L.sel = [Math.min(drag.t0, t), Math.max(drag.t0, t)];
-    drawEdit();
-  });
-  document.addEventListener("pointerup", (e) => {
-    if (!drag) return;
-    const d = drag; drag = null;
-    if (Math.abs(e.clientX - d.x0) < 4) {             // click: listen from here
-      L.sel = d.prev; playRange(L.song, d.t0, null); return;
-    }
-    if (L.sel && L.sel[1] - L.sel[0] < 1) L.sel = [L.sel[0], Math.min(d.dur, L.sel[0] + 1)];
-    renderEdit();
-  });
-
   /* ---------- jobs ---------- */
 
   function activeJob() {
@@ -445,16 +287,8 @@ const Lux = (() => {
     return state.jobs.find((j) => j.kind === "separate" && j.params.song === L.song.name && (j.status === "running" || j.status === "queued"));
   }
   let lastJobKey = "";
-  let lastEditKey = "";
   async function onJobs(jobs) {
     if (!L.song) return;
-    const ek = jobs.filter((j) => j.kind === "edit" && j.params.song === L.song.name).map((j) => j.id + j.status).join();
-    if (ek !== lastEditKey) {
-      const done = lastEditKey && ek.split(",").some((k) => k.endsWith("done") && !lastEditKey.includes(k));
-      lastEditKey = ek;
-      if (done) await loadLibrary();
-      if (visible() && L.tab === "edit") renderEdit();
-    }
     const mine = jobs.filter((j) => (j.kind === "separate" || j.kind === "stemedit") && j.params.song === L.song.name);
     const key = mine.map((j) => j.id + j.status).join();
     if (key === lastJobKey) return;
@@ -523,6 +357,7 @@ const Lux = (() => {
   }
   function effectiveGain(i) {
     const t = L.tracks[i], anySolo = L.tracks.some((x) => x.solo);
+    if (L.audition != null) return i === L.audition ? (t.gain || 1) : 0;
     if (t.mute || (anySolo && !t.solo)) return 0;
     return t.gain;
   }
@@ -547,7 +382,10 @@ const Lux = (() => {
     L.tracks[0].src.onended = () => { if (L.playing && position() >= L.duration - 0.1) { stopAudio(); L.offset = 0; updateTransport(); drawLanes(); } };
     L.playing = true; loop(); updateTransport();
   }
-  function pause() { if (!L.playing) return; L.offset = position(); stopAudio(); updateTransport(); }
+  function pause() {
+    if (L.audition != null) { L.audition = null; applyGains(); }
+    if (!L.playing) return; L.offset = position(); stopAudio(); updateTransport();
+  }
   function stopAudio() {
     for (const t of L.tracks) { try { t.src?.stop(); } catch { /* not started */ } t.src = t.node = t.analyser = null; }
     L.playing = false; cancelAnimationFrame(L.raf);
@@ -608,6 +446,9 @@ const Lux = (() => {
       row.querySelector('[data-lx="mute"]').classList.toggle("on", t.mute);
       row.querySelector('[data-lx="solo"]').classList.toggle("on", t.solo);
       row.classList.toggle("silent", effectiveGain(i) === 0);
+      row.classList.toggle("armed", L.armed === i);
+      const eb = row.querySelector('[data-lx="arm"]');
+      if (eb) { eb.classList.toggle("on", L.armed === i); eb.querySelector("span").textContent = L.armed === i ? "Editing" : "Edit"; }
       const v = row.querySelector('[data-lx="vol"]'); v.value = t.gain; paintRange(v);
     });
     drawLanes();
@@ -670,26 +511,30 @@ const Lux = (() => {
     if (a === "new") { pause(); L.view = "pick"; render(); }
     if (a === "tomix") { L.view = "mix"; render(); }
     if (a === "set") { const keep = L.laneSel; L.view = "mix"; selectSet(L.sets[i]).then(() => { L.laneSel = keep; render(); }); }
-    if (a === "play") toggle();
+    if (a === "play") { L.mixStopAt = null; if (L.audition != null) { L.audition = null; applyGains(); } toggle(); }
     if (a === "mute") { L.tracks[i].mute = !L.tracks[i].mute; applyGains(); }
     if (a === "solo") { L.tracks[i].solo = !L.tracks[i].solo; applyGains(); }
     if (a === "preset") preset(t.dataset.p);
     if (a === "export") exportMix();
-    if (a === "eb-play" && L.laneSel) { seek(L.laneSel.a); play(); L.mixStopAt = L.laneSel.b; }
+    if (a === "eb-play" && L.laneSel) {
+      pause();
+      L.audition = L.listen === "solo" ? L.armed : null; applyGains();
+      seek(L.laneSel.a); play(); L.mixStopAt = L.laneSel.b;
+    }
+    if (a === "eb-listen") {
+      L.listen = t.dataset.v;
+      if (L.playing && L.mixStopAt != null) { L.audition = L.listen === "solo" ? L.armed : null; applyGains(); }
+      renderEditBar();
+    }
+    if (a === "arm") {
+      if (L.armed === i) { L.armed = null; L.laneSel = null; }
+      else { const sel = L.laneSel; L.armed = i; L.laneSel = sel ? { ...sel, i } : null; L.stemLyrics = null; }
+      if (L.audition != null) pause();
+      syncTrackUI(); renderEditBar();
+    }
     if (a === "eb-takes") { L.stemTakes = Number(t.dataset.n); renderEditBar(); }
     if (a === "eb-go" && L.laneSel) startStemEdit();
-    if (a === "eb-clear") { L.laneSel = null; renderEditBar(); drawLanes(); }
-    if (a === "tab") { L.tab = t.dataset.t; if (L.tab === "edit") pause(); render(); }
-    if (a === "ed-clear") { L.sel = null; renderEdit(); }
-    if (a === "ed-play" && L.sel) playRange(L.song, L.sel[0], L.sel[1]);
-    if (a === "ed-takes") { L.takes = Number(t.dataset.n); renderEdit(); }
-    if (a === "ed-go" && L.sel) startEdit();
-    if (a === "take-play") {
-      const tk = state.library.find((x) => x.name === t.dataset.name);
-      if (state.current?.name === tk.name && !audio.paused) audio.pause();
-      else playRange(tk, tk.edit.start_s - 3, tk.edit.end_s + 2);
-    }
-    if (a === "take-open") { L.tab = "stems"; open(t.dataset.name); }
+    if (a === "eb-clear") { L.laneSel = null; L.armed = null; if (L.audition != null) pause(); syncTrackUI(); renderEditBar(); }
   });
   document.addEventListener("input", (e) => {
     const t = e.target; if (t.dataset?.lx !== "vol") return;
@@ -699,11 +544,12 @@ const Lux = (() => {
   document.addEventListener("pointerdown", (e) => {
     const cv = e.target.closest(".lx-lane canvas"); if (!cv || !L.duration) return;
     const r = cv.getBoundingClientRect();
-    laneDrag = { i: Number(cv.dataset.i), r, x0: e.clientX, t0: ((e.clientX - r.left) / r.width) * L.duration };
+    laneDrag = { i: Number(cv.dataset.i), r, x0: e.clientX, t0: ((e.clientX - r.left) / r.width) * L.duration,
+                 canSelect: Number(cv.dataset.i) === L.armed };
     cv.setPointerCapture(e.pointerId);
   });
   document.addEventListener("pointermove", (e) => {
-    if (!laneDrag || Math.abs(e.clientX - laneDrag.x0) < 4) return;
+    if (!laneDrag || !laneDrag.canSelect || Math.abs(e.clientX - laneDrag.x0) < 4) return;
     const t = Math.max(0, Math.min(L.duration, ((e.clientX - laneDrag.r.left) / laneDrag.r.width) * L.duration));
     L.laneSel = { i: laneDrag.i, a: Math.min(laneDrag.t0, t), b: Math.max(laneDrag.t0, t) };
     drawLanes();
@@ -711,7 +557,7 @@ const Lux = (() => {
   document.addEventListener("pointerup", (e) => {
     if (!laneDrag) return;
     const d = laneDrag; laneDrag = null;
-    if (Math.abs(e.clientX - d.x0) < 4) { seek(d.t0); return; }     // click: jump there
+    if (!d.canSelect || Math.abs(e.clientX - d.x0) < 4) { seek(d.t0); return; }     // click (or a lane not in edit mode): jump there
     if (L.laneSel.b - L.laneSel.a < 1) L.laneSel.b = Math.min(L.duration, L.laneSel.a + 1);
     L.stemLyrics = null; renderEditBar(); drawLanes();
   });
@@ -720,12 +566,11 @@ const Lux = (() => {
     if (e.key === "ArrowRight") seek(position() + 5);
     if (e.key === "ArrowLeft") seek(position() - 5);
   });
-  window.addEventListener("resize", () => { if (visible()) { drawLanes(); drawEdit(); drawTakes(); } });
+  window.addEventListener("resize", () => visible() && drawLanes());
 
   function onLibrary() {
     if (!visible()) return;
     if (!L.song) renderPicker();
-    else if (L.tab === "edit" && !drag) renderEdit();
   }
 
   return { open, route, onJobs, onLibrary, pause, toggle, visible };

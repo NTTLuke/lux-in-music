@@ -59,32 +59,23 @@ the browser). Stems are stored in `outputs/stems/<song>/<mode>/` with a `stems.j
 
 ### Studio Mode: regenerate a piece of one stem
 
-In the stem mixer, **drag across a lane** (a click still seeks) to select a piece of that stem, then
-**Regenerate** (1-3 takes, lyrics optional). Only that stem changes inside the selection; every other stem
-stays bit-identical. Each take is saved as a new tab of the stem set (`<mode>-take-<time>/`, with `base`
-and `edit` in `stems.json`), so you can A/B the tabs and chain edits on a take.
+In the stem mixer press **Edit** on a track (only that track accepts a selection), drag across its lane,
+then **Regenerate** (1-3 takes, lyrics optional). **Play selection** plays only that stem by default
+(*Listen: Solo stem*) or the full mix. Only that stem changes inside the selection; every other stem stays
+bit-identical. Each take is saved as a new tab of the stem set (`<mode>-take-<time>/`, with `base` and
+`edit` in `stems.json`), so you can A/B the tabs and chain edits on a take.
 
-How (`separate.replace_stem`): new take of the song section (`edit.render_section`, below), the section
-plus 3 s of context is run through the same separator, and only the chosen stem is crossfaded into the
-selection. Measured: about 14 s per take with HTDemucs 6 stems. YuE2 writes the new part together with its
-own backing, so a new vocal line usually fits the original band, but key or timing clashes are possible:
-listen to each take.
-
-### Studio Mode: Replace section (whole song)
-
-Drag across a song's waveform, optionally change the lyrics of that part, pick 1-3 takes, then
-**Regenerate selection**. Each take is a new library song (`… · edit`, with a `parent` link), so you can
-split it into stems or edit it again.
-
-How it works (`studio/edit.py`):
+How it works (`studio/separate.py` `replace_stem`, `studio/edit.py` `render_section`):
 1. semantic tokens of the song (25/s): exported at generation time, or recovered by re-running the original
    request with `stop_after=semantic` (deterministic: re-render correlates 1.0000 with the original)
-2. `semantic_prefix` = tokens before the selection, the model samples the selection with a new seed
-3. tokens spliced back (`new[:B] + old[B:]`) and rendered once for a coherent acoustic pass
-4. original audio kept outside the selection, 0.2 s equal-power crossfades at the edges
+2. `semantic_prefix` = tokens before the selection, the model samples the selection with a new seed;
+   tokens are spliced back (`new[:B] + old[B:]`) and the song is rendered once
+3. the selection plus 3 s of context is separated with the same model as the stem set
+4. only the chosen stem is crossfaded (0.2 s) into the selection
 
-Measured on 30-38 s songs: about 10-11 s per take. Outside the selection the result is identical to the
-original (correlation 1.0000).
+Measured: about 14 s per take with HTDemucs 6 stems. YuE2 writes the new part together with its own
+backing, so a new vocal line usually fits the original band, but key or timing clashes are possible:
+listen to each take.
 
 ### Look: after Lux In Tenebris
 

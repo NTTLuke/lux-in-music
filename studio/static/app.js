@@ -12,8 +12,8 @@ const ICON = {
 
 const SECTIONS = ["Intro", "Verse", "Pre-Chorus", "Chorus", "Bridge", "Outro"];
 const CHIPS = {
-  Genre: ["pop", "indie pop", "rock", "hip hop", "r&b", "electronic", "synthwave", "lo-fi", "jazz", "funk", "folk", "country", "metal", "soul", "house", "reggae", "cinematic"],
-  Mood: ["uplifting", "melancholic", "dreamy", "energetic", "romantic", "dark", "chill", "epic", "nostalgic"],
+  Genre: ["pop", "indie pop", "rock", "hip hop", "r&b", "electronic", "melodic techno", "progressive house", "EDM", "trance", "techno", "synthwave", "lo-fi", "jazz", "funk", "folk", "country", "metal", "soul", "house", "reggae", "cinematic"],
+  Mood: ["uplifting", "melancholic", "dreamy", "energetic", "romantic", "dark", "chill", "epic", "hypnotic", "euphoric", "nostalgic"],
   Instr: ["acoustic guitar", "electric guitar", "piano", "warm Rhodes", "synth pads", "808 bass", "strings", "brass", "soft drums", "punchy drums"],
   Vocal: ["female vocal", "male vocal", "airy vocal", "raspy vocal", "choir harmonies"],
   Mix: ["polished demo mix", "lo-fi tape", "wide stereo", "live band feel", "radio ready"],
@@ -26,6 +26,88 @@ const SLIDERS = [
   { id: "semantic_top_k", label: "Top-k", min: 10, max: 300, step: 5, def: 100 },
   { id: "semantic_repetition_penalty", label: "Repetition", min: 1, max: 1.6, step: 0.01, def: 1.2 },
 ];
+
+/* ---------- demo templates ---------- */
+
+const DEMOS = [
+  {
+    id: "lux-tenebris",
+    label: "Demo · Melodic Techno",
+    hint: "3 min cinematic melodic techno: dark synths, arpeggios, ethereal vocal, festival drops",
+    params: {
+      title: "Lux In Tenebris",
+      lyrics: `[Intro]
+Can you feel it in the dark
+Can you feel it in the dark
+
+[Verse]
+Neon veins across a midnight sky
+Silent engines learning how to fly
+I follow the pulse through the static and the rain
+Every heartbeat whispers out your name
+
+[Pre-Chorus]
+Hold on, the light is breaking through
+Hold on, I'm falling into you
+
+[Chorus]
+We are the light in the dark
+Burning like a thousand stars
+Lux in tenebris, we never fall apart
+We are the light, we are the light in the dark
+
+[Verse]
+Cities sleeping under frozen glass
+Shadows dancing, memories that pass
+You turned the silence into something I could hear
+A single spark and all the night is clear
+
+[Pre-Chorus]
+Hold on, the sky is opening wide
+Hold on, there's fire on the other side
+
+[Chorus]
+We are the light in the dark
+Burning like a thousand stars
+Lux in tenebris, we never fall apart
+We are the light, we are the light in the dark
+
+[Bridge]
+When the world goes quiet
+And the stars go cold
+I will be your signal
+I will bring you home
+
+[Chorus]
+We are the light in the dark
+Burning like a thousand stars
+Lux in tenebris, we never fall apart
+We are the light, we are the light in the dark
+
+[Outro]
+Can you feel it in the dark
+We are the light in the dark`,
+      style: "English, melodic techno, dark progressive house, cinematic, 124 BPM, four-on-the-floor kick, pulsing rolling bassline, hypnotic synth arpeggios, huge analog lead, epic supersaw chords, atmospheric pads, ethereal female vocal, airy reverb, emotional build-up, massive festival drop, wide stereo, polished club master",
+      cot: "full",
+      max_duration_s: 180,
+    },
+  },
+];
+
+function setupDemos() {
+  $("demo-row").innerHTML = DEMOS.map((d) => `
+    <button type="button" class="demo-btn" data-demo="${d.id}" title="${esc(d.hint)}">
+      <svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.8L20 10l-5 3.9L16.5 20 12 16.6 7.5 20 9 13.9 4 10l6.1-1.2z"/></svg>
+      <span><b>${esc(d.label)}</b><small>${esc(d.hint)}</small></span>
+    </button>`).join("");
+  $("demo-row").onclick = (e) => {
+    const b = e.target.closest("[data-demo]"); if (!b) return;
+    const d = DEMOS.find((x) => x.id === b.dataset.demo);
+    loadIntoForm(d.params);
+    $("seed-random").checked = true; $("seed").disabled = true;   // every press of Create is a new take
+    b.classList.add("loaded"); setTimeout(() => b.classList.remove("loaded"), 900);
+  };
+}
 
 /* ---------- state ---------- */
 
@@ -523,6 +605,7 @@ async function health() {
 /* ---------- boot ---------- */
 
 setupForm();
+setupDemos();
 loadLibrary();
 pollJobs();
 health(); setInterval(health, 8000);

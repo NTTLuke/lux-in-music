@@ -116,5 +116,16 @@ input[type=range] { background: linear-gradient(90deg, var(--lux) var(--p, 50%),
 .lx-track { background: linear-gradient(90deg, color-mix(in srgb, var(--c) 9%, transparent), transparent 42%), var(--raise); }
 .lx-meter i { background: linear-gradient(to top, var(--c), #fff3dc); }
 .lx-split-lane i { box-shadow: 0 0 22px -4px var(--c); }
-.ed-sel-dot { background: var(--lux); box-shadow: 0 0 12px var(--lux); }
 .spinner-ring { border-top-color: var(--lux); }
+
+/* demo templates */
+.demo-row { display: flex; flex-direction: column; gap: 8px; }
+.demo-btn { all: unset; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 8px;
+  border: 1px solid rgba(240,162,60,.35); background: linear-gradient(90deg, rgba(240,162,60,.10), rgba(255,107,53,.03) 70%); transition: .18s; }
+.demo-btn:hover { border-color: rgba(240,162,60,.7); box-shadow: 0 10px 30px -14px rgba(240,162,60,.7); }
+.demo-btn svg { width: 18px; height: 18px; fill: var(--lux); stroke: none; filter: drop-shadow(0 0 6px rgba(240,162,60,.7)); flex: none; }
+.demo-btn span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.demo-btn b { font-size: 13px; color: #f6d39b; letter-spacing: .01em; }
+.demo-btn small { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.demo-btn.loaded { animation: demoflash .9s ease; }
+@keyframes demoflash { 0% { box-shadow: 0 0 0 0 rgba(240,162,60,.8); } 100% { box-shadow: 0 0 0 14px rgba(240,162,60,0); } }

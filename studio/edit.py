@@ -1,4 +1,4 @@
-"""Replace a section of a song (Suno-style "replace section") with YuE2 semantic tokens.
+"""Regenerate a section of a song with YuE2 semantic tokens (used to edit a piece of one stem).
 
 How it works (see vendor/audio.cpp/docs/models/yue2.md, "Continuing From Semantic Tokens"):
   1. get the song's semantic tokens S (25 per second): saved at generation time, or
@@ -135,34 +135,3 @@ def render_section(song: str, start_s: float, end_s: float, seed: int, lyrics: s
     info = {"meta": meta, "lyrics": lyrics, "spliced": spliced, "start_s": round(a / FPS, 2), "end_s": round(b / FPS, 2),
             "seed": seed, "elapsed_s": round(time.time() - t0, 1)}
     return out, info
-
-
-def replace_section(song: str, start_s: float, end_s: float, seed: int, lyrics: str | None = None) -> dict:
-    out, info = render_section(song, start_s, end_s, seed, lyrics)
-    meta = info["meta"]
-
-    # save as a new library song that remembers its parent and its tokens (so edits can chain)
-    root_title = meta.get("title") or meta["name"]
-    stem = f"{time.strftime('%Y%m%d-%H%M%S')}-{engine.slugify(root_title)}-edit"
-    wav_path = engine.OUTPUT_DIR / f"{stem}.wav"
-    wav_path.write_bytes(_wav(out))
-    (engine.OUTPUT_DIR / f"{stem}.semantic.json").write_text(json.dumps(info["spliced"]))
-    artifacts = {}
-    if meta.get("artifacts", {}).get("score"):
-        artifacts["score"] = meta["artifacts"]["score"]
-    edit_meta = {
-        "name": stem,
-        "title": f"{root_title.split(' · edit')[0]} · edit",
-        "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
-        "params": {**meta["params"], "lyrics": info["lyrics"]},
-        "duration_s": round(len(out) / SR, 2),
-        "elapsed_s": info["elapsed_s"],
-        "sample_rate": SR,
-        "channels": out.shape[1],
-        "artifacts": artifacts,
-        "peaks": engine.compute_peaks(wav_path),
-        "parent": song,
-        "edit": {"start_s": info["start_s"], "end_s": info["end_s"], "seed": seed},
-    }
-    (engine.OUTPUT_DIR / f"{stem}.json").write_text(json.dumps(edit_meta, indent=2))
-    return edit_meta
