@@ -24,6 +24,8 @@ from .params import GenerationParams
 FPS = 25                 # semantic frames per second
 SR = 48000               # YuE2 output sample rate
 XFADE_S = 0.2            # crossfade at each edge of the replaced region
+MAX_SAME_TOKENS = 0.5    # a take sharing more than this share of tokens with the original is re-rolled
+MAX_REROLLS = 3
 
 
 def _run(lyrics: str, seed: int, options: dict) -> dict:
@@ -103,8 +105,15 @@ def crossfade_region(orig: np.ndarray, new: np.ndarray, sa: int, sb: int, xf: in
     return orig * np.sqrt(1 - w)[:, None] + new * np.sqrt(w)[:, None]
 
 
-def render_section(song: str, start_s: float, end_s: float, seed: int, lyrics: str | None = None) -> tuple[np.ndarray, dict]:
-    """New take of [start_s, end_s) of a song; returns the composite audio (48 kHz) and edit info."""
+def render_section(song: str, start_s: float, end_s: float, seed: int, lyrics: str | None = None,
+                   variation: str = "new") -> tuple[np.ndarray, dict]:
+    """New take of [start_s, end_s) of a song; returns the composite audio (48 kHz) and edit info.
+
+    variation="new"   regenerate without the song's score: same history, freshly written notes
+                      (measured on the vocal line: melody similarity 0.53-0.63, like two different
+                      parts of the same song, vs 0.94 when the score is kept)
+    variation="same"  keep the score: the same notes re-sung, only the performance/timbre changes
+    """
     meta = json.loads((engine.OUTPUT_DIR / f"{song}.json").read_text())
     tokens = song_tokens(song)
     n = len(tokens)
@@ -115,12 +124,21 @@ def render_section(song: str, start_s: float, end_s: float, seed: int, lyrics: s
 
     lyrics = lyrics if lyrics and lyrics.strip() else meta["params"]["lyrics"]
     options = _base_options(meta)
+    if variation == "new" and "abc" in options:
+        # The score fixes melody and rhythm; drop it so the model writes the selection anew.
+        options = {k: v for k, v in options.items() if k not in ("abc", "cot")} | {"cot": "off"}
     t0 = time.time()
 
-    # 2. new take of the selection, conditioned on everything before it
-    leg = _semantic(_run(lyrics, seed, {**options, "semantic_prefix": json.dumps(tokens[:a]),
-                                        "semantic_min_tokens": str(b), "semantic_max_tokens": str(b),
-                                        "stop_after": "semantic"}))
+    # 2. new take of the selection, conditioned on everything before it. A take that repeats the
+    #    original (many identical tokens) is re-rolled with another seed so every take is a new version.
+    for attempt in range(MAX_REROLLS + 1):
+        leg = _semantic(_run(lyrics, seed, {**options, "semantic_prefix": json.dumps(tokens[:a]),
+                                            "semantic_min_tokens": str(b), "semantic_max_tokens": str(b),
+                                            "stop_after": "semantic"}))
+        same = sum(x == y for x, y in zip(leg[a:b], tokens[a:b])) / (b - a)
+        if same <= MAX_SAME_TOKENS:
+            break
+        seed = (seed + 7919) % 2**63
     spliced = leg[:b] + tokens[b:]
 
     # 3. one acoustic pass over the whole spliced song (original seed keeps the NAR noise)
@@ -133,5 +151,65 @@ def render_section(song: str, start_s: float, end_s: float, seed: int, lyrics: s
     length = min(len(orig), len(new))
     out = crossfade_region(orig[:length], new[:length], int(a / FPS * SR), int(b / FPS * SR), int(XFADE_S * SR))
     info = {"meta": meta, "lyrics": lyrics, "spliced": spliced, "start_s": round(a / FPS, 2), "end_s": round(b / FPS, 2),
-            "seed": seed, "elapsed_s": round(time.time() - t0, 1)}
+            "seed": seed, "same_tokens": round(same, 3), "variation": variation, "elapsed_s": round(time.time() - t0, 1)}
     return out, info
+
+
+def beat_grid(song: str) -> dict:
+    """Tempo and downbeat of a song, so edits can snap to beats and bars (cached in the song's json).
+
+    Onset strength (spectral flux) autocorrelation picks the beat period; the score's Q:/M: header,
+    when the song was planned, narrows the tempo search and gives the bar length.
+    """
+    meta_path = engine.OUTPUT_DIR / f"{song}.json"
+    meta = json.loads(meta_path.read_text())
+    if "beats" in meta:
+        return meta["beats"]
+
+    prior_bpm, per_bar = None, 4
+    score = meta.get("artifacts", {}).get("score")
+    if score and (engine.OUTPUT_DIR / score).exists():
+        abc = (engine.OUTPUT_DIR / score).read_text()
+        import re
+        if m := re.search(r"^Q:\s*(\d+)/(\d+)\s*=\s*(\d+)", abc, re.M):
+            prior_bpm = float(m.group(3)) * 4 * int(m.group(1)) / int(m.group(2))   # in quarter notes
+        if m := re.search(r"^M:\s*(\d+)/(\d+)", abc, re.M):
+            per_bar = int(m.group(1))
+
+    x = _pcm((engine.OUTPUT_DIR / f"{song}.wav").read_bytes()).mean(axis=1)
+    hop, n_fft = 512, 2048
+    frames = 1 + (len(x) - n_fft) // hop
+    idx = np.arange(n_fft)[None, :] + hop * np.arange(frames)[:, None]
+    mag = np.log1p(np.abs(np.fft.rfft(x[idx] * np.hanning(n_fft), axis=1)))
+    onset = np.maximum(0, np.diff(mag, axis=0)).sum(axis=1)
+    onset = (onset - onset.mean()) / (onset.std() + 1e-9)
+    fps = SR / hop
+
+    # comb scan: for every candidate tempo, how strongly do onsets line up on a beat grid at its best phase
+    # YuE2 renders a planned song from its score, so the score tempo is trusted (±1.5% for drift);
+    # without a score the whole 70-180 BPM range is scanned.
+    lo_bpm, hi_bpm = (prior_bpm * 0.985, prior_bpm * 1.015) if prior_bpm else (70.0, 180.0)
+
+    def alignment(p: float) -> tuple[float, float]:
+        phases = np.arange(0, p, 0.5)
+        means = [onset[np.arange(ph, len(onset) - 1, p).astype(int)].mean() for ph in phases]
+        k = int(np.argmax(means))
+        return means[k], float(phases[k])
+
+    candidates = []
+    for bpm in np.arange(lo_bpm, hi_bpm + 1e-6, 0.1 if prior_bpm else 0.25):
+        score_b, ph = alignment(fps * 60 / bpm)
+        # without a score, a mild preference for 90-140 BPM settles half/double-tempo ties
+        prior = 1.0 if prior_bpm else np.exp(-0.5 * (np.log2(bpm / 115.0) / 0.8) ** 2)
+        candidates.append((score_b * (0.85 + 0.15 * prior), bpm, ph))
+    _, bpm_best, phase = max(candidates)
+    period = fps * 60 / bpm_best
+    beat_strength = [onset[(np.arange(phase + k * period, len(onset) - 1, period * per_bar)).astype(int)].sum()
+                     for k in range(per_bar)]
+    downbeat = phase + int(np.argmax(beat_strength)) * period
+
+    beats = {"bpm": round(float(60 * fps / period), 2), "offset_s": round(float(downbeat / fps % (period * per_bar / fps)), 3),
+             "beat_s": round(float(period / fps), 4), "beats_per_bar": per_bar, "source": "score+audio" if prior_bpm else "audio"}
+    meta["beats"] = beats
+    meta_path.write_text(json.dumps(meta, indent=2))
+    return beats

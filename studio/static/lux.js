@@ -30,8 +30,11 @@ const Lux = (() => {
     song: null, sets: [], set: null, view: "pick", mode: "4stems", prompt: "",
     ctx: null, buffers: {}, tracks: [], playing: false, startAt: 0, offset: 0, duration: 0,
     loadingSet: null, raf: 0, master: null,
-    laneSel: null, mixStopAt: null, stemTakes: 1, stemLyrics: null,
+    laneSel: null, mixStopAt: null, stemTakes: 1,
     armed: null,        // index of the track in edit mode (set only by its Edit button)
+    beats: null,        // {bpm, offset_s, beat_s, beats_per_bar} of the current song
+    snap: true,         // snap edit selections to the beat grid
+    variation: "new",   // "new" = write the selection anew, "same" = same notes, new performance
     listen: "solo",     // Play selection: "solo" = only the armed stem, "mix" = full mix
     audition: null,     // while auditioning solo, index of the only audible track
   };
@@ -56,11 +59,12 @@ const Lux = (() => {
     const name = m[1] ? decodeURIComponent(m[1]) : null;
     if (!name) { L.song = null; stopAudio(); return renderPicker(); }  // re-rendered by onLibrary()
     if (L.song?.name !== name) {
-      stopAudio(); L.set = null; L.buffers = {}; L.laneSel = null; L.stemLyrics = null; L.armed = null; L.audition = null;
+      stopAudio(); L.set = null; L.buffers = {}; L.laneSel = null; L.armed = null; L.audition = null; L.beats = null;
       if (!state.library.length) await loadLibrary();
       L.song = state.library.find((s) => s.name === name) || null;
       if (!L.song) return renderPicker();
       await refreshSets();
+      fetch(`/api/beats/${encodeURIComponent(name)}`).then((r) => r.ok ? r.json() : null).then((b) => { L.beats = b; drawLanes(); renderEditBar(); }).catch(() => {});
       L.view = L.sets.length ? "mix" : "pick";
       if (L.sets.length) await selectSet(L.sets[0]);
     }
@@ -198,19 +202,24 @@ const Lux = (() => {
     const ls = L.laneSel && L.laneSel.i === L.armed ? L.laneSel : null;
     const st = L.armed != null ? L.set.stems[L.armed] : null;
     if (!st && !running.length && !failed) { box.innerHTML = ""; return; }
-    if (L.stemLyrics == null) L.stemLyrics = L.song.params.lyrics;
     const c = st ? (STEM_COLORS[st.id] || "#f0a23c") : "#f0a23c";
     box.innerHTML = `
       ${st && !ls ? `<div class="lx-eb waiting" style="--c:${c}">
         <div class="lx-eb-row">
           <span class="lx-ticon"><svg viewBox="0 0 24 24">${STEM_ICONS[st.id] || STEM_ICONS.other}</svg></span>
-          <div class="lx-eb-title"><b>Editing ${esc(st.label)}</b><span>Drag across the highlighted ${esc(st.label)} lane to choose the part to regenerate</span></div>
+          <div class="lx-eb-title"><b>Editing ${esc(st.label)}</b><span>Drag across the highlighted ${esc(st.label)} lane to choose the part you want a new version of</span></div>
           <button class="icon-btn" data-lx="eb-clear" title="Stop editing"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         </div></div>` : ""}
       ${ls ? `<div class="lx-eb" style="--c:${c}">
         <div class="lx-eb-row">
           <span class="lx-ticon"><svg viewBox="0 0 24 24">${STEM_ICONS[st.id] || STEM_ICONS.other}</svg></span>
-          <div class="lx-eb-title"><b>Regenerate ${esc(st.label)}</b><span>${fmt(ls.a)} – ${fmt(ls.b)} · ${(ls.b - ls.a).toFixed(1)} s · other stems stay as they are</span></div>
+          <div class="lx-eb-title"><b>Regenerate ${esc(st.label)}</b><span>${fmt(ls.a)} – ${fmt(ls.b)} · ${barsLabel(ls)} · a new version of this part, the rest of the song stays as it is</span></div>
+          <label class="toggle lx-eb-snap" title="Snap the selection to beats and bars so the new part starts and ends on the beat"><input type="checkbox" data-lx="eb-snap" ${L.snap ? "checked" : ""} ${L.beats ? "" : "disabled"}><span></span>Snap${L.beats ? ` · ${Math.round(L.beats.bpm)} BPM` : ""}</label>
+          ${L.song.params.cot !== "off" ? `<div class="lx-eb-listen"><span>Variation</span>
+            <div class="segmented small">
+              <button type="button" data-lx="eb-var" data-v="new" class="${L.variation === "new" ? "on" : ""}" title="Write this part anew: new melody and phrasing, same tempo and key">New idea</button>
+              <button type="button" data-lx="eb-var" data-v="same" class="${L.variation === "same" ? "on" : ""}" title="Keep the song's score: the same notes, performed and rendered again">Same melody</button>
+            </div></div>` : ""}
           <div class="lx-eb-listen"><span>Listen</span>
             <div class="segmented small">
               <button type="button" data-lx="eb-listen" data-v="solo" class="${L.listen === "solo" ? "on" : ""}" title="Only the ${esc(st.label)} stem">Solo stem</button>
@@ -221,15 +230,11 @@ const Lux = (() => {
           <button class="create-btn lx-eb-go" data-lx="eb-go"><svg viewBox="0 0 24 24"><path d="M12 3l1.9 5.8L20 10l-5 3.9L16.5 20 12 16.6 7.5 20 9 13.9 4 10l6.1-1.2z"/></svg>Regenerate</button>
           <button class="icon-btn" data-lx="eb-clear" title="Clear selection"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         </div>
-        <details class="lx-eb-lyrics" ${L.stemLyrics !== L.song.params.lyrics ? "open" : ""}><summary>Change the lyrics sung here (optional)</summary>
-          <textarea id="lx-eb-lyrics" rows="6" spellcheck="false">${esc(L.stemLyrics)}</textarea></details>
       </div>` : ""}
       ${running.map((j) => `<div class="ed-job" data-sjob="${j.id}"><span class="spinner-ring"></span>
         <div><b class="${j.status === "running" ? "shimmer" : ""}">${j.status === "running" ? "Regenerating" : "Queued"} ${esc(j.params.stem)} ${fmt(j.params.start_s)}–${fmt(j.params.end_s)}</b>
         <div class="progress"><i data-sbar style="width:0"></i></div><span class="meta" data-stime></span></div></div>`).join("")}
       ${failed ? `<div class="error">${esc(failed.error)}</div>` : ""}`;
-    const ta = document.getElementById("lx-eb-lyrics");
-    if (ta) ta.oninput = () => { L.stemLyrics = ta.value; };
   }
   function tickStemJobs() {
     for (const j of stemJobs()) {
@@ -242,12 +247,22 @@ const Lux = (() => {
   }
   setInterval(tickStemJobs, 250);
 
+  function snapTime(t) {
+    const g = L.beats; if (!g || !L.snap) return t;
+    return Math.max(0, Math.min(L.duration, g.offset_s + Math.round((t - g.offset_s) / g.beat_s) * g.beat_s));
+  }
+  function barsLabel(sel) {
+    const len = sel.b - sel.a, g = L.beats;
+    if (!g || !L.snap) return `${len.toFixed(1)} s`;
+    const beats = Math.round(len / g.beat_s), bars = beats / g.beats_per_bar;
+    return Number.isInteger(bars) ? `${bars} bar${bars === 1 ? "" : "s"}` : `${beats} beats`;
+  }
+
   async function startStemEdit() {
     const { i, a, b } = L.laneSel, st = L.set.stems[i];
     for (let k = 0; k < L.stemTakes; k++) {
       const body = { song: L.song.name, set_id: L.set.id, stem: st.id, start_s: +a.toFixed(2), end_s: +b.toFixed(2),
-                     seed: Math.floor(Math.random() * 2 ** 31) };
-      if (L.stemLyrics && L.stemLyrics !== L.song.params.lyrics) body.lyrics = L.stemLyrics;
+                     seed: Math.floor(Math.random() * 2 ** 31), variation: L.variation };
       const r = await fetch("/api/edit/replace-stem", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!r.ok) { const d = (await r.json()).detail; alert(typeof d === "string" ? d : JSON.stringify(d)); return; }
       const job = await r.json();
@@ -427,6 +442,14 @@ const Lux = (() => {
         g.fillStyle = c; g.fillRect(k * 3, (h - bh) / 2, 2, bh);
       }
       g.globalAlpha = 1;
+      if (L.armed === i && L.beats && L.duration) {
+        const bt = L.beats;
+        for (let k = 0, t = bt.offset_s; t < L.duration; k++, t = bt.offset_s + k * bt.beat_s) {
+          const bar = k % bt.beats_per_bar === 0, x = (t / L.duration) * w;
+          g.fillStyle = bar ? "rgba(236,230,220,.22)" : "rgba(236,230,220,.08)";
+          g.fillRect(Math.round(x), bar ? 0 : h * 0.72, 1, bar ? h : h * 0.28);
+        }
+      }
       if (L.laneSel && L.laneSel.i === i && L.duration) {
         const x0 = (L.laneSel.a / L.duration) * w, x1 = (L.laneSel.b / L.duration) * w;
         g.fillStyle = "rgba(240,162,60,.16)"; g.fillRect(x0, 0, x1 - x0, h);
@@ -528,10 +551,16 @@ const Lux = (() => {
     }
     if (a === "arm") {
       if (L.armed === i) { L.armed = null; L.laneSel = null; }
-      else { const sel = L.laneSel; L.armed = i; L.laneSel = sel ? { ...sel, i } : null; L.stemLyrics = null; }
+      else { const sel = L.laneSel; L.armed = i; L.laneSel = sel ? { ...sel, i } : null; }
       if (L.audition != null) pause();
       syncTrackUI(); renderEditBar();
     }
+    if (a === "eb-snap") {
+      L.snap = t.checked;
+      if (L.snap && L.laneSel) L.laneSel = { ...L.laneSel, a: snapTime(L.laneSel.a), b: snapTime(L.laneSel.b) };
+      renderEditBar(); drawLanes();
+    }
+    if (a === "eb-var") { L.variation = t.dataset.v; renderEditBar(); }
     if (a === "eb-takes") { L.stemTakes = Number(t.dataset.n); renderEditBar(); }
     if (a === "eb-go" && L.laneSel) startStemEdit();
     if (a === "eb-clear") { L.laneSel = null; L.armed = null; if (L.audition != null) pause(); syncTrackUI(); renderEditBar(); }
@@ -558,8 +587,10 @@ const Lux = (() => {
     if (!laneDrag) return;
     const d = laneDrag; laneDrag = null;
     if (!d.canSelect || Math.abs(e.clientX - d.x0) < 4) { seek(d.t0); return; }     // click (or a lane not in edit mode): jump there
-    if (L.laneSel.b - L.laneSel.a < 1) L.laneSel.b = Math.min(L.duration, L.laneSel.a + 1);
-    L.stemLyrics = null; renderEditBar(); drawLanes();
+    L.laneSel = { ...L.laneSel, a: snapTime(L.laneSel.a), b: snapTime(L.laneSel.b) };
+    while (L.laneSel.b - L.laneSel.a < 1 && L.laneSel.b < L.duration)   // at least 1 s, grown beat by beat
+      L.laneSel.b = Math.min(L.duration, L.laneSel.b + (L.beats && L.snap ? L.beats.beat_s : 1 - (L.laneSel.b - L.laneSel.a)));
+    renderEditBar(); drawLanes();
   });
   document.addEventListener("keydown", (e) => {
     if (!visible() || e.target.matches("input, textarea")) return;

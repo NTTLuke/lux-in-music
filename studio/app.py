@@ -13,9 +13,11 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
-from . import engine, separate
+from . import edit, engine, separate
 from .params import GenerationParams
 
 STATIC = Path(__file__).parent / "static"
@@ -72,7 +74,7 @@ def _worker() -> None:
             if job["kind"] == "stemedit":
                 p = job["params"]
                 res = separate.replace_stem(p["song"], p["set_id"], p["stem"], p["start_s"], p["end_s"],
-                                            p["seed"], p.get("lyrics"))
+                                            p["seed"], p.get("lyrics"), p.get("variation", "new"))
                 job.update(status="done", result=res)
                 continue
             if job["kind"] == "separate":
@@ -194,6 +196,7 @@ class EditRequest(BaseModel):
 class StemEditRequest(EditRequest):
     set_id: str = Field(..., pattern=r"^[\w.-]+$")
     stem: str = Field(..., pattern=r"^[\w-]+$")
+    variation: Literal["new", "same"] = "new"
 
 
 @app.post("/api/edit/replace-stem")
@@ -213,6 +216,13 @@ def edit_replace_stem(req: StemEditRequest):
                                "mode": base["mode"]}}
     _queue.put(job_id)
     return jobs[job_id]
+
+
+@app.get("/api/beats/{song}")
+def song_beats(song: str):
+    if "/" in song or song.startswith(".") or not (engine.OUTPUT_DIR / f"{song}.json").exists():
+        raise HTTPException(404)
+    return edit.beat_grid(song)
 
 
 @app.get("/api/lux/{song}")

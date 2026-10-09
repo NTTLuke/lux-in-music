@@ -150,3 +150,5 @@ body.lux-mode .create, body.lux-mode .workspace { display: none; }
 .lx-eb-listen { display: flex; align-items: center; gap: 8px; }
 .lx-eb-listen > span { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .12em; }
 .lx-eb-listen .segmented button { padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+
+.lx-eb-snap { font-size: 12px; color: var(--muted); white-space: nowrap; }
