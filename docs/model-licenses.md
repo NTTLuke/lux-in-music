@@ -18,7 +18,8 @@ commercially redistributing the model weights. The repository code has its own
 
 The [GGUF publisher's model card](https://huggingface.co/audio-cpp/Yue2-3B-GGUF#license)
 and [Hugging Face weight license](https://huggingface.co/m-a-p/YuE2-3B/blob/main/LICENSE)
-still display the base CC BY-NC 4.0 terms. The catalog records those exact pinned
-artifact terms. Do not replace that identifier with Apache 2.0 or describe all
-commercial uses as authorized. For creator output rights, read the original
-project's additional permission linked above.
+still display the base CC BY-NC 4.0 terms. The catalog records the pinned base
+artifact terms and separately links the additional creator permission at
+[its reviewed source revision](https://github.com/multimodal-art-projection/YuE/blob/cbb3b060725ddd95ac6e6237cfb709e153da5988/MODEL_LICENSE).
+Do not replace the base identifier with Apache 2.0 or describe all commercial
+uses as authorized. Read both the artifact terms and the additional permission.

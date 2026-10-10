@@ -163,6 +163,21 @@ class DownloadTests(ModelFixtures):
             self.assertEqual(self.setup_profile(download=False)["status"], "done")
             probe.assert_called_once()
 
+    def test_updated_license_terms_need_review_and_reuse_unchanged_runtime_validation(self):
+        self.setup_profile()
+        old = self.profile()
+        self.catalog[0]["licenses"].append({"component": "Output permission", "id": "Creator terms",
+            "url": "https://licenses.test/creator", "summary": "Additional creator permission", "verified": True})
+        updated = self.profile()
+        self.assertNotEqual(old["license_review_id"], updated["license_review_id"])
+        self.assertIsNotNone(self.manager.verified_profile(updated))
+        with self.assertRaisesRegex(ValueError, "licenses"):
+            self.manager.start("test-model", "q8_0", "f16", old["license_review_id"], True, False)
+        with patch.object(self.provider, "probe", side_effect=AssertionError("Unchanged runtime was already tested")):
+            self.assertEqual(self.setup_profile(download=False)["status"], "done")
+        self.assertIn(updated["license_review_id"], self.manager.status()["accepted_license_reviews"])
+        self.assertEqual(self.manager.snapshot()["licenses"][-1]["id"], "Creator terms")
+
     def test_changed_files_do_not_reuse_the_previous_successful_validation(self):
         self.setup_profile()
         profile = self.profile()

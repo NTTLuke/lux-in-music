@@ -39,8 +39,8 @@ branch builds on that work. Natural song endings (#1) remain a separate task.
 
 ## Verification
 
-- `.venv/bin/python scripts/check.py --full`: passed, 49 tests total (five harness
-  regressions and 44 application tests). Only natural-song-ending remains planned.
+- `.venv/bin/python scripts/check.py --full`: passed, 51 tests total (five harness
+  regressions and 46 application tests). Only natural-song-ending remains planned.
 - Lock consistency check passed offline (21 packages); `git diff --check` passed.
 - Fresh Python environment: real `uv sync --frozen --python 3.12` succeeded in
   `/private/tmp/lux-fresh-environment` using the existing lock file.
@@ -152,3 +152,30 @@ permission in the original GitHub README and MODEL_LICENSE. Personal creators ca
 monetize outputs; companies need a commercial weight license. The base weight
 license remains CC BY-NC 4.0. Links and scope are recorded in
 `docs/model-licenses.md`; the pinned GGUF identifier was not relabeled as Apache.
+
+## Model cards and mixer follow-up
+
+The user requested implicit verification in the setup button and no accumulated
+setup log above Settings. Each card now owns a single setup action and its progress
+or latest relevant error. Active verified separators use the same disabled
+Active / Verified state as the generation model. Completed attempts are hidden;
+repair is available under Maintenance. An unselected verified combination still
+offers activation, and an unverified combination still needs setup.
+
+The YuE2 card now displays the additional individual creator permission and its
+immutable GitHub source revision alongside the base weight licenses. Revised
+license details require one new acknowledgement; already validated weights/runtime
+do not need another probe for that acknowledgement. Two new offline tests cover
+the pinned terms and this review/validation distinction. Full harness: 51 tests.
+
+The user's Studio Mode stack trace exposed `set` being used outside its scope in
+`trackRow`. It was reached only for songs with editing enabled, which explains
+why another song could still open. The renderer now passes the stem set explicitly.
+The browser regression opens both a legacy noneditable song and an editable song,
+renders two tracks, and opens the edit bar. No JavaScript errors occurred.
+
+The full isolated browser flow also passed active-separator buttons, card progress,
+local error/retry handling, hidden maintenance actions and visible creator terms.
+Desktop/mobile screenshots were captured; the desktop result was inspected.
+The current temporary archive is updated after source comparisons. A restart
+loads the changed catalog/backend; a browser reload loads the new UI scripts.

@@ -118,7 +118,7 @@ class ModelManager:
     def verified_profile(self, profile):
         saved = self.state["profiles"].get(profile["id"])
         keys = ("revision", "provider", "family", "task", "precision", "vae_precision", "root",
-                "main_file", "vae_file", "files", "licenses", "license_review_id")
+                "main_file", "vae_file", "files")
         if not saved or any(saved.get(key) != profile.get(key) for key in keys):
             return None
         if saved.get("input_audio") and saved["input_audio"] != profile.get("input_audio"):

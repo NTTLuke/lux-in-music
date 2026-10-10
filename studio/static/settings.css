@@ -16,9 +16,12 @@
 .model-licenses .license-accept { display: flex; align-items: flex-start; gap: 10px; line-height: 1.5; }
 .license-accept input { width: auto; margin-top: 4px; flex: 0 0 auto; }
 .model-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.model-job { margin: 18px 0; padding: 16px; border: 1px solid var(--line); border-radius: 8px; }
-.model-job progress { display: block; width: 100%; margin: 12px 0; accent-color: var(--lux, #f0a23c); }
-.model-job small { display: block; overflow-wrap: anywhere; margin: 8px 0; }
+.model-progress { margin-top: 14px; }
+.model-progress progress { display: block; width: 100%; margin: 12px 0; accent-color: var(--lux, #f0a23c); }
+.model-progress small { display: block; overflow-wrap: anywhere; margin: 8px 0; }
+.model-maintenance { margin-top: 16px; color: var(--muted); font-size: 12px; }
+.model-maintenance summary { cursor: pointer; }
+.model-maintenance button { margin-top: 10px; }
 .model-card button:disabled, .lx-mode:disabled { opacity: .5; cursor: not-allowed; }
 @media (max-width: 700px) { .settings { padding: 18px; } .model-cards { grid-template-columns: 1fr; } }
 @media (max-width: 820px) { .mobile-nav { display: flex; position: sticky; top: 0; z-index: 20; background: var(--bg); padding: 12px; gap: 12px; border-bottom: 1px solid var(--line); } .mobile-nav a { font-size: 12px; color: var(--text); } }

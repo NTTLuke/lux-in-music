@@ -8,6 +8,9 @@ const Settings = (() => {
   const busy = () => status.jobs.some((j) => ["queued", "running"].includes(j.status));
   const visible = () => location.hash === "#/settings";
   const capability = () => status.active?.capabilities || {};
+  const running = (job) => job && ["queued", "running"].includes(job.status);
+  const latestJob = (model) => status.jobs.slice().reverse().find((job) => model.choices.some((c) => c.id === job.profile_id));
+  const stageLabel = (job) => ({ queued: "Waiting…", downloading: "Downloading…", verifying: "Checking files…", testing: "Testing on this computer…" }[job.stage] || "Preparing…");
 
   async function request(path, body) {
     const response = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
@@ -54,17 +57,21 @@ const Settings = (() => {
 
   function progress() {
     const focused = document.activeElement?.id;
-    $("model-progress").innerHTML = status.jobs.slice().reverse().map((job) => {
+    for (const model of catalog) {
+      const container = document.getElementById(`progress-${model.id}`);
+      if (!container) continue;
+      const job = latestJob(model);
+      if (!job || job.status === "done" || !running(job) && job.profile_id !== selection(model).id) { container.innerHTML = ""; container.hidden = true; continue; }
       const transferred = job.completed_bytes + (job.stage === "downloading" ? job.file_bytes || 0 : 0);
       const percent = Math.min(100, Math.round(100 * transferred / (job.total_bytes || 1)));
-      const running = ["queued", "running"].includes(job.status);
-      const label = { queued: "Waiting", downloading: "Downloading", verifying: "Checking files", testing: "Testing on this computer", ready: "Ready", error: "Setup failed", cancelled: "Cancelled" }[job.stage] || job.stage;
-      return `<div class="model-job"><div class="label-row"><b>${esc(label)}</b><span>${job.stage === "downloading" ? `${percent}%` : esc(job.status)}</span></div>
-        ${running ? `<progress ${job.stage === "downloading" ? `value="${percent}"` : ""} max="100"></progress>` : ""}
-        <small>${esc(job.file || job.profile_id)}${job.stage === "downloading" ? ` · ${sizes(transferred)} / ${sizes(job.total_bytes)}` : ""}</small>
-        ${job.error ? `<p class="error">${esc(job.error)} Review the error, then retry verification or repair the files.</p>` : ""}
-        ${running ? `<button id="cancel-${job.id}" type="button" class="btn" data-cancel="${esc(job.id)}">Cancel setup</button>` : ""}</div>`;
-    }).join("");
+      container.hidden = false;
+      container.innerHTML = `${running(job) ? `<progress aria-label="${esc(stageLabel(job))}" ${job.stage === "downloading" ? `value="${percent}"` : ""} max="100"></progress>` : ""}
+        ${job.file ? `<small>${esc(job.file)}${job.stage === "downloading" ? ` · ${percent}% · ${sizes(transferred)} / ${sizes(job.total_bytes)}` : ""}</small>` : ""}
+        ${job.error ? `<p class="error" role="alert">Setup failed: ${esc(job.error)} Retry verification or repair the files.</p>` : ""}
+        ${job.status === "cancelled" ? '<p class="hint">Setup cancelled. You can retry when ready.</p>' : ""}
+        ${running(job) ? `<button id="cancel-${job.id}" type="button" class="btn" data-cancel="${esc(job.id)}">Cancel setup</button>` : ""}`;
+      if (running(job)) $(`setup-${model.id}`).textContent = stageLabel(job);
+    }
     if (focused) document.getElementById(focused)?.focus({ preventScroll: true });
   }
 
@@ -75,9 +82,14 @@ const Settings = (() => {
     $("model-cards").innerHTML = catalog.map((model) => {
       const choice = selection(model), vaes = [...new Set(model.choices.map((c) => c.vae_precision).filter(Boolean))];
       const precisions = [...new Set(model.choices.map((c) => c.precision).filter(Boolean))];
-      const checked = accepted.has(choice.license_review_id), active = status.active?.id === choice.id;
+      const checked = accepted.has(choice.license_review_id);
+      const active = status.active?.id === choice.id || Object.values(status.separators).includes(choice.id);
+      const savedReview = status.accepted_license_reviews?.includes(choice.license_review_id);
+      const readyActive = active && choice.ready && savedReview;
+      const action = model.delivery === "external" || choice.installed ? "activate" : "download";
+      const label = readyActive ? "Active · Verified" : active && choice.ready ? "Confirm license review" : choice.ready ? "Activate verified model" : model.delivery === "external" ? "Connect / verify" : choice.installed ? "Verify and activate" : "Download and activate";
       const licensed = model.licenses.length && model.licenses.every((l) => l.verified && l.id && l.url);
-      return `<article class="model-card"><div class="label-row"><h3>${esc(model.name)}</h3><span class="badge">${model.task === "gen" ? "Generation" : "Optional separation"}</span></div>
+      return `<article class="model-card" id="model-${model.id}"><div class="label-row"><h3>${esc(model.name)}</h3><span class="badge">${model.task === "gen" ? "Generation" : "Optional separation"}</span></div>
         <p>${esc(model.description)}</p><div class="row2">${precisions.length ? `<div><label for="precision-${model.id}">Main model precision</label><select id="precision-${model.id}" data-precision="${model.id}">${precisions.map((p) => `<option value="${p}" ${p === choice.precision ? "selected" : ""}>${p.toUpperCase()}</option>`).join("")}</select></div>` : ""}
         ${vaes.length ? `<div><label for="vae-${model.id}">VAE precision</label><select id="vae-${model.id}" data-vae="${model.id}">${vaes.map((v) => `<option value="${v}" ${v === choice.vae_precision ? "selected" : ""}>${v.toUpperCase()}${v === model.default_vae ? " (default)" : ""}</option>`).join("")}</select></div>` : ""}</div>
         <p class="hint">${model.delivery === "external" ? "This provider needs no local model download. Precision is managed by the provider." : `Files: ${sizes(choice.bytes)} · Missing files: ${sizes(choice.missing_bytes)}. Runtime memory also needs cache and buffers; peak memory has not been measured here.`}</p>
@@ -85,9 +97,10 @@ const Settings = (() => {
         <div class="model-licenses"><h4>Licenses — review before downloading</h4>${model.licenses.map((l) => `<p><b>${esc(l.component)}: <a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.id)}</a></b><br>${esc(l.summary)}</p>`).join("")}
         ${licensed ? "" : '<p class="error">License information is incomplete. Downloads are unavailable until this release is reviewed.</p>'}
         <label class="license-accept"><input type="checkbox" id="license-${model.id}" data-license="${choice.license_review_id}" ${checked ? "checked" : ""} ${licensed ? "" : "disabled"}> I have reviewed and accept these component license terms.</label></div>
-        <p class="hint model-verification">${choice.ready ? active ? "Verified · Active generation model" : "Verified on this computer" : choice.installed ? "Files found — verification required" : "Not installed"} · Release ${esc(model.revision.slice(0, 12))}</p>
-        <div class="model-actions"><button type="button" class="btn primary" id="download-${model.id}" data-setup="${model.id}" data-action="${model.delivery === "external" ? "activate" : "download"}" ${busy() || !checked || !licensed ? "disabled" : ""}>${model.delivery === "external" ? "Connect / verify" : "Download / repair and activate"}</button>
-        ${model.delivery === "external" ? "" : `<button type="button" class="btn" id="activate-${model.id}" data-setup="${model.id}" data-action="activate" ${busy() || !checked || !licensed || !choice.installed || active && choice.ready ? "disabled" : ""}>${active && choice.ready ? "Active · Verified" : choice.ready ? "Activate verified model" : "Verify existing files and activate"}</button>`}</div></article>`;
+        <p class="hint model-verification">${choice.ready ? active ? `Verified · Active ${model.task === "gen" ? "generation" : "separation"} model` : "Verified on this computer" : choice.installed ? "Files found — verification required" : "Not installed"} · Release ${esc(model.revision.slice(0, 12))}</p>
+        <div class="model-actions"><button type="button" class="btn primary" id="setup-${model.id}" data-setup="${model.id}" data-action="${action}" ${busy() || !checked || !licensed || readyActive ? "disabled" : ""}>${label}</button></div>
+        <div id="progress-${model.id}" class="model-progress" role="status" aria-live="polite" hidden></div>
+        ${model.delivery !== "external" && choice.installed ? `<details class="model-maintenance"><summary>Maintenance</summary><button type="button" class="btn" id="repair-${model.id}" data-setup="${model.id}" data-action="download" ${busy() || !checked || !licensed ? "disabled" : ""}>Repair / recheck files</button></details>` : ""}</article>`;
     }).join("");
     progress();
     if (focused) document.getElementById(focused)?.focus({ preventScroll: true });

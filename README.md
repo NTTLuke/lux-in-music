@@ -68,14 +68,17 @@ already prepared UI; `scripts/run_engine.sh` serves the verified selected profil
    the VAE separately (F16 by default, or F32). BF16 is different from FP16.
 2. Review the component licenses and acknowledge the exact release. Unknown
    licenses block setup. Displayed file sizes exclude extra runtime memory.
-3. Download/repair and activate, or verify existing files. Progress covers
-   download, integrity checks and a short inference test on this computer.
+3. Use the model's setup button to download missing files or verify existing ones.
+   Progress appears in that card during transfer, checks and a short runtime test.
 4. Open Create after activation. Only supported model controls are shown.
 
 Verified profiles and license reviews persist across restarts. Returning to a
 verified precision/VAE combination shows its saved status; switching to it uses
 its existing validation. Changed files, releases or runtime binaries require
-verification again. Download / repair remains available for a full recheck.
+verification again. Active verified models show a disabled **Active · Verified**
+button, including optional separators. **Maintenance → Repair / recheck files**
+runs full checks when needed. Completed setup attempts do not accumulate above
+the cards.
 
 Downloads can be cancelled and retried; partial files resume when the server
 supports ranges. Invalid files or a failed runtime test preserve the previous

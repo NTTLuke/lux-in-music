@@ -103,6 +103,11 @@ implement a third-party service, credentials UI, billing or MiniMax support.
   after reload. A verified profile can be selected again without hashing or
   probing unchanged files. Compare the current release, files, paths and runtime
   token before reuse. Explicit repair performs full verification again.
+- Each model card owns its setup action, progress and latest relevant error.
+  Active verified generation and separation profiles have disabled status buttons.
+  Successful setup history is not rendered in Settings. Repair is an explicit
+  action under Maintenance. New license documents require review, while unchanged
+  file/runtime validation can be reused after that acknowledgement.
 - A source pin describes the supported native build. External binaries record
   their path and compatibility fingerprint, without claiming a known source revision.
 - Provider locks protect a runtime during inference. Queued jobs keep a profile

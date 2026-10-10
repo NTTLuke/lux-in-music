@@ -186,7 +186,7 @@ const Lux = (() => {
           <button class="btn primary lx-export" data-lx="export"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Export mix</button>
         </div>
         <div class="lx-editbar" id="lx-editbar"></div>
-        <div class="lx-tracks" id="lx-tracks">${set.stems.map((st, i) => trackRow(st, i)).join("")}</div>
+        <div class="lx-tracks" id="lx-tracks">${set.stems.map((st, i) => trackRow(st, i, set)).join("")}</div>
         <div class="lx-foot"><b class="lx-tip">Tip:</b> press <b>Edit</b> on a track, then drag across its lane to regenerate that part of the stem only. Separated in ${fmt(set.elapsed_s)} with ${esc(MODE_INFO[set.mode].model)}${L.loadingSet ? " · loading audio…" : ""}</div>
       </div>`;
     syncTrackUI(); drawLanes(); updateTransport(); renderEditBar();
@@ -272,7 +272,7 @@ const Lux = (() => {
     renderEditBar(); pollJobs();
   }
 
-  function trackRow(st, i) {
+  function trackRow(st, i, set) {
     const c = STEM_COLORS[st.id] || "#f0a23c";
     return `
       <div class="lx-track ${st.silent ? "no-signal" : ""}" data-i="${i}" style="--c:${c}">

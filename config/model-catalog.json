@@ -86,7 +86,7 @@
           "component": "Main model",
           "id": "CC-BY-NC-4.0",
           "url": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/blob/cca74d8980c00f30ab8d52248a367c01ad633ec2/README.md",
-          "summary": "Attribution required. Noncommercial use only. Review the full terms before use or redistribution.",
+          "summary": "Base weight license: attribution when redistributing weights. See the additional creator permission below for monetizing outputs. Company commercial use requires an agreement with the authors.",
           "verified": true,
           "release_revision": "cca74d8980c00f30ab8d52248a367c01ad633ec2"
         },
@@ -94,10 +94,19 @@
           "component": "VAE",
           "id": "CC-BY-NC-4.0",
           "url": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/blob/cca74d8980c00f30ab8d52248a367c01ad633ec2/README.md",
-          "summary": "Attribution required. Noncommercial use only. Review the full terms before use or redistribution.",
+          "summary": "Base weight license: attribution when redistributing weights. See the additional creator permission below for monetizing outputs. Company commercial use requires an agreement with the authors.",
           "verified": true,
           "release_revision": "cca74d8980c00f30ab8d52248a367c01ad633ec2",
           "upstream_source": "https://huggingface.co/m-a-p/YuE2-Vae"
+        },
+        {
+          "component": "Output permission for individual creators (main model and VAE)",
+          "id": "YuE2 Individual Creator Permission",
+          "url": "https://github.com/multimodal-art-projection/YuE/blob/cbb3b060725ddd95ac6e6237cfb709e153da5988/MODEL_LICENSE",
+          "summary": "Personal users, creators and musicians acting individually may monetize generated outputs without fees or royalties to the model authors. Company commercial use of the weights needs a separate license. Responsible-use and third-party-rights conditions apply.",
+          "verified": true,
+          "release_revision": "cca74d8980c00f30ab8d52248a367c01ad633ec2",
+          "source_revision": "cbb3b060725ddd95ac6e6237cfb709e153da5988"
         }
       ]
     },
@@ -107,7 +116,10 @@
       "provider": "audio.cpp",
       "family": "bs_roformer",
       "task": "sep",
-      "input_audio": {"sample_rate": 44100, "channels": 2},
+      "input_audio": {
+        "sample_rate": 44100,
+        "channels": 2
+      },
       "mode_id": "vocals",
       "revision": "e479ac197bae727f69574261a8025696bc51de48",
       "install_dir": "sep",
@@ -142,7 +154,10 @@
       "provider": "audio.cpp",
       "family": "htdemucs_6stems",
       "task": "sep",
-      "input_audio": {"sample_rate": 44100, "channels": 2},
+      "input_audio": {
+        "sample_rate": 44100,
+        "channels": 2
+      },
       "mode_id": "6stems",
       "revision": "e479ac197bae727f69574261a8025696bc51de48",
       "install_dir": "sep",
@@ -177,7 +192,10 @@
       "provider": "audio.cpp",
       "family": "htdemucs",
       "task": "sep",
-      "input_audio": {"sample_rate": 44100, "channels": 2},
+      "input_audio": {
+        "sample_rate": 44100,
+        "channels": 2
+      },
       "mode_id": "4stems",
       "revision": "e479ac197bae727f69574261a8025696bc51de48",
       "install_dir": "sep",
@@ -212,7 +230,10 @@
       "provider": "audio.cpp",
       "family": "sam_audio",
       "task": "s2s",
-      "input_audio": {"sample_rate": 48000, "channels": 2},
+      "input_audio": {
+        "sample_rate": 48000,
+        "channels": 2
+      },
       "mode_id": "anything",
       "revision": "d429aa7d3a8a5a41ad05d83a57177a98e596ee7f",
       "install_dir": "sep/SAM-Audio-GGUF",
