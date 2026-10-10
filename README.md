@@ -6,6 +6,15 @@ with Apple Silicon, using YuE2 through audio.cpp.
 
 You do not need to write code to install it. Follow the steps below in order.
 
+## Hear the Complete Demo
+
+**Lux In Tenebris — Complete Demo** · Dance / Melodic Techno · **3:58**
+
+A full song created locally with Lux, using YuE2 Q8_0 and the F16 VAE.
+Press Play and enable sound to hear the original ending.
+
+https://github.com/user-attachments/assets/51a82812-f433-4d41-804c-e34d2c7c23a7
+
 [Install on a Mac](#install-on-a-mac) · [Open it again](#open-it-again-and-stop-it) ·
 [Get help](#if-something-goes-wrong) · [Technical reference](#technical-reference)
 

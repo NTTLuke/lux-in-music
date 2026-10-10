@@ -19,6 +19,21 @@ Branch: `docs/simple-local-installation`, based on main after PR #8.
 - Verification passed: portable baseline (five harness tests), five offline
   bootstrap tests, launcher `--help` confirming port/browser flags, and
   `git diff --check`. No fresh real native build is claimed for this doc change.
+- The user also requested a playable README preview and explicitly authorized
+  uploading only the accepted Complete Demo. Uploaded one 6.49 MB H.264/AAC
+  MP4 attachment with a static cover and the full song (about 237.5 seconds,
+  48 kHz stereo). Source WAV remains in the local Library; no model files,
+  other songs, settings or runtime artifacts were uploaded. The media file is
+  an attachment, outside Git history and installation ZIPs.
+- Preview attachment: https://github.com/user-attachments/assets/51a82812-f433-4d41-804c-e34d2c7c23a7
+  Native GitHub video rendering uses the standalone attachment URL in README.
+  Repository access is required while this repository is private.
+- GitHub's Markdown renderer returned a native video element with controls.
+  Chrome loaded the uploaded 1280×720 media, reported a 237.5-second duration,
+  played it and reached the end after seeking to the final seconds, with no
+  media error. GitHub starts it muted, so README explicitly says to enable sound.
+  This is remote playback verification; human listening acceptance belongs to
+  the original full-song test recorded below. No signed media URLs are committed.
 
 ## Delivered: Create layout and genre templates
 
