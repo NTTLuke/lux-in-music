@@ -135,7 +135,7 @@
       "id": "natural-song-ending",
       "issue": "https://github.com/NTTLuke/lux-in-music/issues/1",
       "description": "Guide song structure by duration and report forced truncation accurately.",
-      "status": "planned",
+      "status": "implemented",
       "tests": ["tests.test_endings"],
       "acceptance": [
         "Keep a maximum-duration cap distinct from a composition target.",

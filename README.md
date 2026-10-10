@@ -20,8 +20,8 @@ CLI can use the shared instructions and run `python3 scripts/check.py`. See
 The [architecture contract](docs/architecture.md) explains provider/model adapters,
 Settings, independent precision choices, and profile records. Track acceptance
 scenarios in [harness/requirements.json](harness/requirements.json). Natural song
-ending work (#1) now plans and checks EOS near the target before rendering; its
-listening acceptance remains open. Clip mode can still cut off a song.
+ending work (#1) now plans and checks EOS near the target before rendering, with
+a real audio test and user listening acceptance. Clip mode can still cut off a song.
 
 ## Architecture
 

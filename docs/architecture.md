@@ -1,7 +1,8 @@
 # Product and architecture contract
 
 This is the product contract for Lux In Music. The requirement ledger records
-implementation status and executable checks. Natural song endings remain planned.
+implementation status and executable checks. Duration-aware endings have a
+recorded native audio test and user listening acceptance.
 
 ## Purpose
 
@@ -164,7 +165,7 @@ validation. Queued/song snapshots remain immutable.
 The YuE2 cap still means a cap. Target mode only renders an EOS stream near the
 target; clip mode preserves and labels forced truncation. Forced-stream rendering
 metadata is separate from composing-stage EOS. Completion needs listening too;
-the requirement remains open for that acceptance. See [song endings](song-endings.md)
+the user accepted the recorded example. See [song endings](song-endings.md)
 for the duration limits, arrangement policy, evidence and model limitations.
 
 ## Delivery and evidence

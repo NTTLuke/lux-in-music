@@ -3,8 +3,9 @@
 ## Current work: duration-aware song endings (#1)
 
 Branch: `fix/duration-aware-song-endings`, based on merged PR #6.
-The technical flow is implemented and verified; listening acceptance remains
-open, so the requirement ledger remains planned and the PR should stay draft.
+The technical flow is implemented and verified. The user accepted the linked
+test audio on 2026-10-10 with "è perfetta !! bravo". This records human listening
+acceptance for that example; the ledger is implemented and PR #7 is ready for review.
 See [song endings](song-endings.md) for the upstream analysis and exact policy.
 
 - Root cause confirmed in three saved songs: plans of 318.72/336.39/286.45 seconds
@@ -45,12 +46,13 @@ See [song endings](song-endings.md) for the upstream analysis and exact policy.
   `089918fc008347c1fbad47ede6260c797588ad8daf9c47f780a905a8308a8446`.
   The last seconds decay from roughly -14 to -61 dBFS; this signal measurement
   supports a quiet tail but does not prove a satisfactory musical ending.
-- **Remaining acceptance:** listen to the final chorus/outro and shortened
-  instrumental transitions; check missing/repeated lyrics and resolution. The
-  session's audio input interface is unavailable, so no listening result is
-  claimed and `listening_verified` stays false. #1 remains open pending that
-  recorded check. Other styles, languages, seeds and BF16/F32 are not covered by
-  this single audio example; failures are bounded and explained, not hidden.
+- **Listening acceptance:** after receiving the WAV link, the user reported
+  "è perfetta !! bravo" on 2026-10-10. This is user acceptance, not an automated
+  listening analysis or a line-by-line lyric audit. The local test record now
+  includes that review. New generations still start with `listening_verified=false`.
+  PR #7 is ready for review; #1 will close when the PR is merged. Other styles,
+  languages, seeds and BF16/F32 are not covered by this single audio example;
+  failures are bounded and explained, not hidden.
 
 The sections below describe the earlier delivered PR #5/#6 work and its evidence.
 

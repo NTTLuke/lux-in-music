@@ -68,7 +68,7 @@ bars needs about 217 seconds at 125 BPM. Its 180-second cap was unsuitable.
 The demo now requests a 240-second arrangement. Other seeds can need different
 durations; refusal/retry is deliberate when fitting would remove vocal material.
 
-## Verification and remaining acceptance
+## Verification and acceptance
 
 Offline tests cover timing (including compressed rests and different units),
 phrase-safe shortening, vocal/final-bar preservation, invalid/truncated plans,
@@ -91,12 +91,12 @@ duration. Adding a textual 180-second instruction to the style also produced
 overlong/malformed plans in two exploratory trials; that alone is not the fix.
 
 The full app-path WAV test and listening acceptance are recorded in
-`docs/progress.md`. Musical ending quality still requires listening to the final
-chorus, outro and transitions and checking for missing or repeated words. The
-available audio inspection interface cannot accept audio input in this session;
-no listening result is claimed. Keep #1 and its ledger acceptance open until
-that check is recorded. A valid WAV and EOS are useful technical evidence, not
-proof of a musically satisfactory ending.
+`docs/progress.md`. After receiving the test WAV link, the user accepted it on
+2026-10-10 with "è perfetta !! bravo". This human feedback completes listening
+acceptance for the example; the agent did not listen or conduct a lyric audit.
+PR #7 is ready for review and #1 should close on merge. New songs still require
+their own listening check: a valid WAV and EOS alone do not prove a musically
+satisfactory ending across other lyrics, styles or seeds.
 
 ## Official sources reviewed (2026-10-10)
 
