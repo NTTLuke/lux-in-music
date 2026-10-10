@@ -30,7 +30,13 @@ and in [CHANGELOG.md](CHANGELOG.md). Use the ZIP from a release when you want a
 known version instead of the newest source.
 
 <!-- release:start -->
-Release details are written here by `./release.sh`.
+**Latest release: [v0.1.0](https://github.com/NTTLuke/lux-in-music/releases/tag/v0.1.0)** · 11 October 2026
+
+- **Download (recommended):** [`lux-in-music-v0.1.0.zip`](https://github.com/NTTLuke/lux-in-music/releases/download/v0.1.0/lux-in-music-v0.1.0.zip) — the app source, ready to extract
+- Also attached: `lux_in_music-0.1.0-py3-none-any.whl`, `lux_in_music-0.1.0.tar.gz`, `SHA256SUMS.txt`
+- [Release notes](https://github.com/NTTLuke/lux-in-music/releases/tag/v0.1.0) · [All releases](https://github.com/NTTLuke/lux-in-music/releases) · [CHANGELOG.md](CHANGELOG.md)
+
+This release includes 5 new features, 1 fix, 1 documentation update and 2 other changes. See [CHANGELOG.md](CHANGELOG.md) for the full list.
 <!-- release:end -->
 
 ## Install on a Mac
