@@ -29,6 +29,29 @@ const SLIDERS = [
 
 /* ---------- demo templates ---------- */
 
+const GENRE_TEMPLATES = [
+  {
+    id: "progressive-metal", name: "Progressive Metal", hint: "Layered riffs · polyrhythms · clean vocal",
+    style: "English, progressive metal, 128 BPM, syncopated seven-string guitar riffs, tight palm-muted rhythm guitars, polyrhythmic drums, melodic lead guitar, atmospheric keyboards, expressive clean male vocal, dynamic verse-chorus development, compact instrumental bridge, resolved outro, powerful balanced mix, wide stereo",
+  },
+  {
+    id: "indie-pop", name: "Indie Pop", hint: "Bright guitars · warm vocal · catchy hooks",
+    style: "English, indie pop, 110 BPM, bright acoustic guitar, jangly electric guitar, warm bass, soft punchy drums, intimate lead vocal, layered chorus harmonies, catchy melodic hook, gentle build-up, concise intro, resolved outro, warm polished mix",
+  },
+  {
+    id: "cinematic-synthwave", name: "Cinematic Synthwave", hint: "Analog synths · retro drums · airy vocal",
+    style: "English, cinematic synthwave, 100 BPM, analog synth arpeggios, warm pulsing bass, retro drum machine, spacious pads, soaring synth lead, airy female vocal, nostalgic night-drive mood, expansive melodic chorus, concise instrumental transitions, resolved outro, wide stereo",
+  },
+  {
+    id: "soul-rnb", name: "Soul & R&B", hint: "Rhodes · laid-back groove · soulful vocal",
+    style: "English, contemporary soul, R&B, 85 BPM, warm Rhodes piano, deep rounded bass, laid-back drums, subtle electric guitar, expressive soulful lead vocal, rich backing harmonies, intimate verses, uplifting chorus, restrained vocal runs, gentle resolved outro, warm clean mix",
+  },
+  {
+    id: "jazz-fusion", name: "Jazz Fusion", hint: "Electric piano · intricate groove · smooth vocal",
+    style: "English, jazz fusion, 115 BPM, electric piano, articulate electric bass, intricate syncopated drums, clean melodic guitar, colorful extended harmony, smooth lead vocal, memorable chorus, compact instrumental interplay, dynamic arrangement, resolved outro, detailed live-band mix",
+  },
+];
+
 const DEMOS = [
   {
     id: "lux-tenebris",
@@ -107,6 +130,23 @@ function setupDemos() {
     $("seed-random").checked = true; $("seed").disabled = true;   // every press of Create is a new take
     b.classList.add("loaded"); setTimeout(() => b.classList.remove("loaded"), 900);
   };
+}
+
+function setupGenreTemplates() {
+  $("template-grid").innerHTML = GENRE_TEMPLATES.map((template) => `
+    <button type="button" class="template-btn" data-template="${template.id}" aria-pressed="false">
+      <b>${esc(template.name)}</b><small>${esc(template.hint)}</small>
+    </button>`).join("");
+  $("template-grid").onclick = (event) => {
+    const button = event.target.closest("[data-template]"); if (!button) return;
+    const template = GENRE_TEMPLATES.find((item) => item.id === button.dataset.template);
+    $("lyrics").value = DEMOS.find((demo) => demo.id === "lux-tenebris").params.lyrics;
+    updateLyricsCount();
+    $("style").value = template.style;
+    syncChips();
+    $("template-status").textContent = `${template.name} template applied.`;
+  };
+  syncChips();
 }
 
 /* ---------- state ---------- */
@@ -336,6 +376,11 @@ function toggleStyleTag(tag) {
 function syncChips() {
   const set = new Set(styleTags().map((t) => t.toLowerCase()));
   for (const c of document.querySelectorAll(".chip")) c.classList.toggle("on", set.has(c.dataset.c.toLowerCase()));
+  for (const button of document.querySelectorAll("[data-template]")) {
+    const selected = GENRE_TEMPLATES.find((template) => template.id === button.dataset.template)?.style === $("style").value;
+    button.setAttribute("aria-pressed", String(selected));
+  }
+  $("template-status").textContent = "";
 }
 function resetAdvanced() {
   state.adv = {};
@@ -636,6 +681,7 @@ async function health() {
 
 setupForm();
 setupDemos();
+setupGenreTemplates();
 loadLibrary();
 pollJobs();
 health(); setInterval(health, 8000);

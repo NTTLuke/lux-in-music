@@ -98,6 +98,10 @@ the corresponding local paths/runtime. Changing a runtime requires a new probe.
 
 * Create panel: title, lyrics with section-tag buttons, style with genre/mood/instrument/vocal/mix chips,
   length slider, planning mode, random/fixed seed, 1-4 variations, advanced sampling sliders, ABC input
+* Genre templates: Progressive Metal, Indie Pop, Cinematic Synthwave, Soul & R&B,
+  and Jazz Fusion. All use the Melodic Techno demo lyrics with the selected style,
+  keeping your title and settings;
+  applying a template starts no generation. The Melodic Techno demo remains above them.
 * Library: generative cover art, waveform per song, live queue with progress/ETA, search
 * Player bar: waveform scrubbing, prev/next, volume, download. Keys: Space play/pause, arrow keys seek 5 s
 * Song panel: lyrics, all generation params, generated ABC score, reuse settings

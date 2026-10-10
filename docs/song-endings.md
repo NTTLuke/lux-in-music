@@ -94,7 +94,7 @@ The full app-path WAV test and listening acceptance are recorded in
 `docs/progress.md`. After receiving the test WAV link, the user accepted it on
 2026-10-10 with "è perfetta !! bravo". This human feedback completes listening
 acceptance for the example; the agent did not listen or conduct a lyric audit.
-PR #7 is ready for review and #1 should close on merge. New songs still require
+PR #7 is merged and #1 is closed. New songs still require
 their own listening check: a valid WAV and EOS alone do not prove a musically
 satisfactory ending across other lyrics, styles or seeds.
 

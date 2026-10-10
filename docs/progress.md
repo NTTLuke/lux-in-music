@@ -1,11 +1,34 @@
 # Project handoff
 
-## Current work: duration-aware song endings (#1)
+## Current work: Create layout and genre templates
+
+Branch: `feat/create-layout-genre-templates`, based on main after PR #7.
+
+- Create is 520 px wide on large desktop screens (previously 440 px), with
+  the remaining width assigned to Library. Medium screens use a bounded
+  proportional width; the mobile view stays stacked. Hide library mini-waves
+  below 1320 px to keep song titles and actions usable.
+- An expandable Genre templates section beneath the existing Melodic Techno
+  demo offers five styles: Progressive Metal, Indie Pop, Cinematic Synthwave,
+  Soul & R&B, and Jazz Fusion. Following the user's correction, every template
+  loads the same lyric text as the Melodic Techno demo with its genre style,
+  preserving title, duration, seed and planning. It sends no generation
+  request. Selection is highlighted and cleared when the style is edited.
+- Portable baseline and full offline harness passed (67 tests). The extended
+  isolated Chrome flow passed with no JavaScript errors: all five presets apply,
+  load the exact demo lyrics, preserve title/settings and cause no generation requests; the demo remains in
+  Create. Layout checked at 1440/1280/1024/900/390 px without horizontal overflow.
+  Desktop and mobile screenshots were inspected under `/private/tmp/lux-templates-ui/`.
+- No real audio generation was run for this change. These are style starting
+  points, not claims of measured musical quality for each genre.
+
+## Delivered: duration-aware song endings (#1)
 
 Branch: `fix/duration-aware-song-endings`, based on merged PR #6.
 The technical flow is implemented and verified. The user accepted the linked
 test audio on 2026-10-10 with "è perfetta !! bravo". This records human listening
-acceptance for that example; the ledger is implemented and PR #7 is ready for review.
+acceptance for that example; the ledger is implemented. PR #7 was merged into
+main (`664183745a11ba9b665ad99cb966799c8495d92d`) and issue #1 is closed.
 See [song endings](song-endings.md) for the upstream analysis and exact policy.
 
 - Root cause confirmed in three saved songs: plans of 318.72/336.39/286.45 seconds
@@ -50,7 +73,7 @@ See [song endings](song-endings.md) for the upstream analysis and exact policy.
   "è perfetta !! bravo" on 2026-10-10. This is user acceptance, not an automated
   listening analysis or a line-by-line lyric audit. The local test record now
   includes that review. New generations still start with `listening_verified=false`.
-  PR #7 is ready for review; #1 will close when the PR is merged. Other styles,
+  PR #7 is merged and #1 is closed. Other styles,
   languages, seeds and BF16/F32 are not covered by this single audio example;
   failures are bounded and explained, not hidden.
 
