@@ -78,6 +78,9 @@ implement a third-party service, credentials UI, billing or MiniMax support.
 
 ## Storage and activation decisions
 
+- Native source submodules use command-scoped GitHub SSH-to-HTTPS URL rewrites.
+  Fresh setup and retries must work without SSH keys. Do not modify global Git
+  configuration or the pinned upstream source to select a transport.
 - Catalog file URLs, sizes and integrity hashes are tied to immutable releases.
   LFS artifacts use SHA-256; small Git sidecars use Git blob SHA-1.
 - Settings records acknowledgement of the exact license/release digest before

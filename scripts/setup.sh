@@ -48,7 +48,12 @@ if [ ! -x "$ENGINE_BINARY" ] || { [ -z "${AUDIOCPP_BINARY:-}" ] && ! .venv/bin/p
     echo "Existing audio.cpp checkout differs from the supported revision. Set AUDIOCPP_BINARY to a compatible build or move the checkout aside before retrying." >&2
     exit 1
   fi
-  git -C vendor/audio.cpp submodule update --init --recursive --depth 1
+  echo "Preparing source submodules over HTTPS…"
+  # Upstream declares SSH URLs. Command-scoped rewrites also reach recursive
+  # clones and retries, without requiring SSH keys or changing global Git config.
+  git -c 'url.https://github.com/.insteadOf=git@github.com:' \
+    -c 'url.https://github.com/.insteadOf=ssh://git@github.com/' \
+    -C vendor/audio.cpp submodule update --init --recursive --depth 1
   BUILD_COMMAND=(bash scripts/build_metal.sh --build-type Release --model-set custom --models "$LUX_MODEL_FAMILIES" --target audiocpp_cli --target audiocpp_server)
   if [ "$(uname -s)" != Darwin ]; then
     BUILD_COMMAND=(bash "$PROJECT_ROOT/scripts/build_cpu.sh")

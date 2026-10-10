@@ -49,6 +49,8 @@ network access, `curl`, `git`, and a C++ compiler. On macOS, install Apple's
 Command Line Tools if requested (`xcode-select --install`). uv is installed
 locally when missing; Python 3.12 and CMake are prepared when needed. Linux uses
 the CPU build. Later runs reuse installed dependencies and a compatible build.
+Source submodules are fetched over HTTPS; public source setup needs no GitHub
+SSH key. If setup stops, rerun the same command to continue.
 
 No model weights are downloaded during startup. The UI opens at
 http://127.0.0.1:8000. Ctrl+C stops the UI and its owned inference processes.

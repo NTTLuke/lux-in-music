@@ -1,6 +1,7 @@
 """Exercise first-run scripts using local fake installation tools, without downloads."""
 
 import os
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -90,3 +91,38 @@ cp "$TEST_INSTALLER" "$2"''')
         self.assertIn("xcode-select --install", result.stderr)
         self.assertNotIn("git clone", self.log.read_text())
         self.assertNotIn("launch -m studio.launch", self.log.read_text())
+
+    def test_retry_of_existing_checkout_rewrites_ssh_submodule_urls_without_network(self):
+        real_git = shutil.which("git")
+        self.assertIsNotNone(real_git, "Git is a software setup prerequisite")
+        global_config = self.root / "global.gitconfig"
+        global_config.write_text("[user]\n\tname = Test only\n")
+        original_config = global_config.read_bytes()
+        self.env.update(GIT_CONFIG_GLOBAL=str(global_config), GIT_CONFIG_NOSYSTEM="1")
+        checkout = self.root / "vendor/audio.cpp"
+        checkout.mkdir(parents=True)
+        def git(*args):
+            return subprocess.run([real_git, "-C", str(checkout), *args], env=self.env,
+                                  capture_output=True, text=True, check=True)
+        git("init")
+        submodule = "external/audio.cpp-server-frontends"
+        # A real submodule index entry; no external repository or commit is fetched.
+        git("update-index", "--add", "--cacheinfo", "160000," + "1" * 40 + "," + submodule)
+        self.tool("git", '''echo "git $*" >> "$TEST_LOG"
+case "$*" in
+  *"submodule update"*) exec ''' + shlex.quote(real_git) + ''' -c protocol.https.allow=never -c protocol.ssh.allow=never "$@" ;;
+  *"rev-parse HEAD"*) echo 6c3ab9ad4e599a44d287697863b4f8846ef658be ;;
+esac''')
+        for url in ("git@github.com:0xShug0/audio.cpp-server-frontends.git",
+                    "ssh://git@github.com/0xShug0/audio.cpp-server-frontends.git"):
+            with self.subTest(url=url):
+                (checkout / ".gitmodules").write_text(f'[submodule "{submodule}"]\n\tpath = {submodule}\n\turl = {url}\n')
+                git("add", ".gitmodules")
+                # A previous failed --init already saved the original SSH URL here.
+                git("config", f"submodule.{submodule}.url", url)
+                result = self.run_studio()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("transport 'https' not allowed", result.stderr)
+                self.assertNotIn("transport 'ssh' not allowed", result.stderr)
+                self.assertNotIn("git clone", self.log.read_text())
+                self.assertEqual(global_config.read_bytes(), original_config)

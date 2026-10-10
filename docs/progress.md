@@ -39,16 +39,17 @@ branch builds on that work. Natural song endings (#1) remain a separate task.
 
 ## Verification
 
-- `.venv/bin/python scripts/check.py --full`: passed, 41 tests total (five harness
-  regressions and 36 application tests). Only natural-song-ending remains planned.
+- `.venv/bin/python scripts/check.py --full`: passed, 42 tests total (five harness
+  regressions and 37 application tests). Only natural-song-ending remains planned.
 - Lock consistency check passed offline (21 packages); `git diff --check` passed.
 - Fresh Python environment: real `uv sync --frozen --python 3.12` succeeded in
   `/private/tmp/lux-fresh-environment` using the existing lock file.
 - Actual warm `NO_OPEN=1 ./studio.sh --port 18000` prepared dependencies, reused
   the existing native build, and served the UI with no active model/engine.
 - Cold software bootstrap, local uv installation, warm reuse, and prerequisite
-  failure are checked with fake local tools. A clean native rebuild on a new
-  machine was not performed; the existing native source/build was verified.
+  failure are checked with fake local tools. After the SSH failure follow-up,
+  an actual clean native build succeeded in the user's fresh archived copy on
+  this Mac. A build on another machine has not been verified.
 - Real Metal runtime probe using the already downloaded YuE2 Q8_0/F16 files
   succeeded and returned nonempty audio. No new real model weights were fetched.
   The probe is a compatibility check, not a listening or song-ending test.
@@ -75,3 +76,25 @@ branch builds on that work. Natural song endings (#1) remain a separate task.
   tests. External service authentication and billing have not been implemented.
 - CI runs portable and offline application checks. Native GPU and browser checks
   remain separate; verify the remote CI result after publishing this branch.
+
+## First-run SSH failure follow-up
+
+The user tested a fresh source archive while reusing existing model files.
+The pinned audio.cpp `.gitmodules` declares `audio.cpp-server-frontends` using
+`git@github.com`, so recursive source setup failed without a GitHub SSH key.
+The previous fake-installer tests did not reproduce that transport requirement.
+
+Setup now passes GitHub SSH-to-HTTPS rewrites only to the submodule command and
+its child processes. This handles both SSH URL forms and already registered URLs
+left by a failed `--init`, without changing the global Git configuration.
+See [Git's URL rewrite documentation](https://git-scm.com/docs/git-config#Documentation/git-config.txt-urlltbasegtinsteadOf).
+
+A new offline regression runs the setup against a real local Git submodule index
+with HTTPS and SSH transports blocked. Both URL forms reach the HTTPS restriction
+rather than SSH, and the fixture's global config remains unchanged. The full
+harness passes (42 tests). The user's existing temporary checkout successfully
+fetched the pinned frontend commit over HTTPS, compiled both native CLI/server
+targets from scratch, and started the UI on port 18001. The Settings API reported
+`setup_required: true`, with no active model. The test server was stopped after
+verification. No model weights were downloaded or selected. The corrected setup
+script was also copied into that temporary archive so the user can resume there.
