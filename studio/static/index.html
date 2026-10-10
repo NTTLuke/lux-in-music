@@ -67,9 +67,12 @@ Sing with the sunrise, we are never alone.</textarea>
       </div>
 
       <div class="field">
-        <div class="label-row"><label for="len">Max length</label><span class="value" id="len-val">1:00</span></div>
-        <input type="range" id="len" min="10" max="240" step="5" value="60">
-        <div class="hint">Upper bound. The model can end the song earlier.</div>
+        <label for="duration-mode" id="duration-mode-label">Duration mode</label>
+        <select id="duration-mode"><option value="target">Complete arrangement</option><option value="cap">Clip / hard limit</option></select>
+        <div class="label-row"><label for="len" id="len-label">Song duration</label><span class="value" id="len-val">3:00</span></div>
+        <input type="range" id="len" min="30" max="330" step="5" value="180">
+        <div class="hint" id="duration-hint"></div>
+        <div class="hint" id="lyrics-advice" aria-live="polite"></div>
       </div>
 
       <div class="field">

@@ -117,6 +117,37 @@ def main():
                     expect(page.locator(".lx-edit-btn")).to_have_count(2)
                     page.locator(".lx-edit-btn").first.click()
                     expect(page.locator("#lx-editbar")).to_contain_text("Editing vocals")
+                    # Offer duration planning through a capability response. The
+                    # isolated provider still produces only fixture audio.
+                    def duration_capability(route):
+                        data = route.fetch().json()
+                        data["active"]["capabilities"].update(target_duration_s=330, min_target_duration_s=30,
+                            max_duration_s=360, planning=["off", "melody", "full"])
+                        route.fulfill(json=data)
+                    page.route("**/api/settings/status", duration_capability)
+                    page.locator("#nav-create").click()
+                    page.evaluate("Settings.refresh(true)")
+                    expect(page.locator("#duration-mode")).to_be_visible()
+                    page.locator("#duration-mode").select_option("target")
+                    page.locator("#len").fill("30")
+                    page.locator("#lyrics").fill("[Verse]\n" + "light " * 100)
+                    expect(page.locator("#lyrics-advice")).to_contain_text("Dense lyrics")
+                    expect(page.locator("#lyrics-advice")).to_contain_text("Add [Outro]")
+                    expect(page.locator("#cot [data-v='full']")).to_have_class("on")
+                    page.locator("#cot [data-v='off']").click()
+                    expect(page.locator("#duration-mode")).to_have_value("cap")
+                    expect(page.locator("#duration-hint")).to_contain_text("cut a song")
+                    page.locator("#duration-mode").select_option("target")
+                    page.locator("#len").fill("240")
+                    with page.expect_request("**/api/generate") as generation_request:
+                        page.locator("#go").click()
+                    body = generation_request.value.post_data_json
+                    assert body["target_duration_s"] == 240 and "max_duration_s" not in body, body
+                    assert body["model_options"]["cot"] == "full", body
+                    page.evaluate("state.library[0].generation = {status:'truncated', message:'Stopped at the hard limit. The song may be unfinished.'}; render()")
+                    expect(page.locator(".badge").filter(has_text="Unfinished · limit reached")).to_be_visible()
+                    page.screenshot(path=str(args.artifacts / "duration-desktop.png"))
+                    page.unroute("**/api/settings/status", duration_capability)
                     page.locator("#nav-settings").click(); page.set_viewport_size({"width": 390, "height": 844})
                     expect(page.locator(".mobile-nav")).to_be_visible()
                     page.locator(".mobile-nav a[href='#/']").click()
@@ -139,7 +170,7 @@ def main():
                     browser.close()
                 print(json.dumps({"settings_first": True, "license_gate": True, "independent_precision": True,
                                   "fake_download_and_activation": True, "capability_controls": True,
-                                  "generation_and_library": True, "mobile_navigation": True, "external_without_weights": True, "verification_survives_reload_and_dropdown": True, "separator_disabled_when_active": True, "card_progress_and_errors_only": True, "creator_terms_visible": True, "mixer_editable_and_legacy_songs": True, "unresolved_license_blocked": True, "javascript_errors": errors}))
+                                  "generation_and_library": True, "duration_target_and_cap": True, "lyric_advice_and_truncation_badge": True, "mobile_navigation": True, "external_without_weights": True, "verification_survives_reload_and_dropdown": True, "separator_disabled_when_active": True, "card_progress_and_errors_only": True, "creator_terms_visible": True, "mixer_editable_and_legacy_songs": True, "unresolved_license_blocked": True, "javascript_errors": errors}))
             finally:
                 server.terminate()
                 try: server.wait(timeout=10)

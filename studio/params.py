@@ -12,4 +12,5 @@ class GenerationParams(BaseModel):
     style: str = Field(..., min_length=1)
     seed: int = Field(1234, ge=0, lt=2**63)
     max_duration_s: float | None = Field(None, gt=0)
+    target_duration_s: float | None = Field(None, gt=0)
     model_options: dict[str, Any] = Field(default_factory=dict)

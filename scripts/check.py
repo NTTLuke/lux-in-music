@@ -157,11 +157,12 @@ def main() -> int:
         report["requirements"] = read_requirements(ROOT)
         print("PASS Requirement ledger", flush=True)
         if report["application_checks"]:
-            # Resolve every implemented selector before running application tests.
+            # Run available checks for planned work too, without promoting its
+            # status. Audio/listening acceptance still lives in the ledger.
             loader = unittest.TestLoader()
             selectors = []
             for item in report["requirements"]:
-                if item["status"] == "implemented":
+                if item["tests"]:
                     suite = loader.loadTestsFromNames(item["tests"])
                     if loader.errors or not suite.countTestCases():
                         raise ValueError(f"Cannot verify requirement {item['id']}: {loader.errors}")

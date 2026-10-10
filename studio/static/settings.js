@@ -32,8 +32,8 @@ const Settings = (() => {
     for (const button of $("cot").children) button.hidden = !cap.planning?.includes(button.dataset.v);
     if (cap.planning?.length && !cap.planning.includes(state.cot)) { state.cot = cap.planning[0]; setSegmented("cot", state.cot); }
     $("abc").closest(".field").hidden = !cap.abc;
-    $("len").closest(".field").hidden = !cap.max_duration_s;
-    if (cap.max_duration_s) { $("len").max = cap.max_duration_s; $("len").value = Math.min(Number($("len").value), cap.max_duration_s); $("len").oninput(); }
+    $("len").closest(".field").hidden = !cap.max_duration_s && !cap.target_duration_s;
+    updateDurationUI();
     for (const slider of SLIDERS) $(slider.id).closest(".slider").hidden = !cap.options?.includes(slider.id);
     const setupHint = "Choose and activate a model in Settings to create music.";
     if (!status.active) $("form-error").textContent = setupHint;

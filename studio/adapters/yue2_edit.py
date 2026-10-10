@@ -68,7 +68,13 @@ def song_tokens(song: str, profile: dict | None = None) -> list[int]:
     params = GenerationParams(**meta["params"])
     # Same request as the original, stopped after the semantic stage: same seed, same tokens.
     options = {**params.to_request()["options"], "stop_after": "semantic"}
-    tokens = _semantic(_run(params.lyrics, params.seed, options, profile))
+    if meta.get("generation", {}).get("target_duration_s"):
+        score = meta.get("artifacts", {}).get("score")
+        if not score:
+            raise RuntimeError("The duration-checked score is missing; semantic recovery is unavailable")
+        options["abc"] = (engine.OUTPUT_DIR / score).read_text()
+    seed = meta.get("generation", {}).get("semantic_seed", params.seed)
+    tokens = _semantic(_run(params.lyrics, seed, options, profile))
     expected = meta["duration_s"] * FPS
     if abs(len(tokens) - expected) > 2:
         raise RuntimeError(f"recovered {len(tokens)} tokens but the song has {expected:.0f} frames")

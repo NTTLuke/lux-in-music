@@ -69,21 +69,31 @@ def health() -> dict:
             "setup_required": status["setup_required"]}
 
 
-def generate(params: GenerationParams, name: str | None = None, profile: dict | None = None) -> GenerationResult:
+def generate(params: GenerationParams, name: str | None = None, profile: dict | None = None, progress=None) -> GenerationResult:
     profile = get_manager().snapshot(profile)
     provider = get_provider(profile)
     adapter = provider.adapter(profile)
     normalized = adapter.normalize(params)
-    request = adapter.request(params)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    title = params.title or auto_title(params.lyrics)
+    stem = name or f"{time.strftime('%Y%m%d-%H%M%S')}-{slugify(title)}"
     t0 = time.time()
-    data = provider.run(profile, request)
+    try:
+        if hasattr(adapter, "generate"):
+            kwargs = {"progress": progress} if progress else {}
+            data = adapter.generate(params, lambda request: provider.run(profile, request), **kwargs)
+        else:
+            data = provider.run(profile, adapter.request(params))
+    except Exception as error:
+        if hasattr(error, "diagnostics"):
+            (OUTPUT_DIR / f"{stem}.failure-report").write_text(json.dumps({
+                "params": normalized.model_dump(exclude_none=True), "model_profile": profile,
+                "error": str(error), **error.diagnostics}, indent=2))
+        raise
     elapsed = time.time() - t0
     if "audio" not in data:
         raise RuntimeError(f"no audio in response: {list(data)}")
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    title = params.title or auto_title(params.lyrics)
-    stem = name or f"{time.strftime('%Y%m%d-%H%M%S')}-{slugify(title)}"
     wav_path = OUTPUT_DIR / f"{stem}.wav"
     wav = base64.b64decode(data["audio"])
     wav_path.write_bytes(wav)
@@ -95,7 +105,9 @@ def generate(params: GenerationParams, name: str | None = None, profile: dict | 
     artifacts = {}
     artifact_meta = {}
     for art in data.get("artifacts", []):
-        ext = {"score": "abc", "semantic": "semantic.json"}.get(art["id"], "bin")
+        ext = {"score": "abc", "semantic": "semantic.json"}.get(art["id"],
+              f"{art['id']}.abc" if art["id"].startswith("plan-") else
+              f"{art['id']}.semantic.json" if art["id"].startswith("semantic-attempt-") else f"{art['id']}.bin")
         p = OUTPUT_DIR / f"{stem}.{ext}"
         p.write_bytes(base64.b64decode(art["payload"]))
         artifacts[art["id"]] = p
@@ -114,6 +126,7 @@ def generate(params: GenerationParams, name: str | None = None, profile: dict | 
         "channels": ch,
         "artifacts": {k: v.name for k, v in artifacts.items()},
         "artifact_meta": artifact_meta,
+        "generation": data.get("generation", {"status": "unknown"}),
         "peaks": compute_peaks(wav_path),
     }, indent=2))
     return GenerationResult(wav_path, meta_path, duration, elapsed, sr, ch, artifacts)
