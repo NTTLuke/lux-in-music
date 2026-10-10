@@ -242,6 +242,27 @@ class DownloadTests(ModelFixtures):
 
 
 class ProviderBoundaryTests(ModelFixtures):
+    def test_separation_uses_the_selected_profiles_audio_format(self):
+        import numpy as np
+        from studio import separate
+        separator = copy.deepcopy(self.catalog[0])
+        separator.update(id="test-separator", task="sep", mode_id="vocals", vaes={}, default_vae=None,
+                         input_audio={"sample_rate": 32000, "channels": 2})
+        self.manager.catalog[separator["id"]] = separator
+        profile = self.manager.profile(separator["id"])
+        self.manager.start(separator["id"], "q8_0", None, profile["license_review_id"], True)
+        self.manager.threads[-1].join(4)
+        def run(selected, request):
+            with wave.open(io.BytesIO(base64.b64decode(request["audio_base64"]))) as audio:
+                self.assertEqual(audio.getframerate(), 32000)
+                self.assertEqual(audio.getnchannels(), 2)
+                self.assertEqual(audio.getnframes(), 3200)
+            return {"named_audio_outputs": [{"id": "vocals", "audio": tiny_audio()}]}
+        with patch.object(self.provider, "run", side_effect=run):
+            stems, _ = separate.separate_audio(np.zeros((4800, 1), dtype=np.float32), 48000,
+                                               separate.MODES["vocals"], None)
+        self.assertEqual(stems[0]["sr"], 8000)
+
     def test_cli_does_not_add_default_yue2_options_to_other_providers(self):
         self.setup_profile()
         from studio.cli import main

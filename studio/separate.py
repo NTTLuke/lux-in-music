@@ -74,13 +74,21 @@ def stem_set_dir(song: str, mode: str, prompt: str | None) -> Path:
 
 def separate_audio(audio: np.ndarray, sr: int, mode: Mode, prompt: str | None, profile=None) -> tuple[list[dict], float]:
     """Run a separator on an in-memory clip; returns [{id, audio, sr}] in the mode's stem order."""
-    if sr != mode.sample_rate:
-        audio = soxr.resample(audio, sr, mode.sample_rate, quality="VHQ")
-    request: dict = {"audio_base64": base64.b64encode(_wav_bytes(audio, mode.sample_rate)).decode()}
+    profile = get_manager().snapshot(profile) if profile else get_manager().separator(mode.id)
+    # Keep the mode rate as a migration fallback for profiles saved before this field.
+    audio_format = profile.get("input_audio", {})
+    sample_rate = audio_format.get("sample_rate", mode.sample_rate)
+    channels = audio_format.get("channels", audio.shape[1])
+    if sr != sample_rate:
+        audio = soxr.resample(audio, sr, sample_rate, quality="VHQ")
+    if channels == 1 and audio.shape[1] != 1:
+        audio = audio.mean(axis=1, keepdims=True)
+    elif channels == 2 and audio.shape[1] == 1:
+        audio = np.repeat(audio, 2, axis=1)
+    request: dict = {"audio_base64": base64.b64encode(_wav_bytes(audio, sample_rate)).decode()}
     if mode.prompt:
         request.update(text=prompt.strip(), seed=42)
     t0 = time.time()
-    profile = get_manager().snapshot(profile) if profile else get_manager().separator(mode.id)
     outputs = get_provider(profile).run(profile, request).get("named_audio_outputs") or []
     if not outputs:
         raise RuntimeError("separator returned no stems")

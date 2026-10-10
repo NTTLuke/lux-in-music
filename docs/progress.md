@@ -39,8 +39,8 @@ branch builds on that work. Natural song endings (#1) remain a separate task.
 
 ## Verification
 
-- `.venv/bin/python scripts/check.py --full`: passed, 42 tests total (five harness
-  regressions and 37 application tests). Only natural-song-ending remains planned.
+- `.venv/bin/python scripts/check.py --full`: passed, 45 tests total (five harness
+  regressions and 40 application tests). Only natural-song-ending remains planned.
 - Lock consistency check passed offline (21 packages); `git diff --check` passed.
 - Fresh Python environment: real `uv sync --frozen --python 3.12` succeeded in
   `/private/tmp/lux-fresh-environment` using the existing lock file.
@@ -98,3 +98,34 @@ targets from scratch, and started the UI on port 18001. The Settings API reporte
 `setup_required: true`, with no active model. The test server was stopped after
 verification. No model weights were downloaded or selected. The corrected setup
 script was also copied into that temporary archive so the user can resume there.
+
+## Separation activation format follow-up
+
+The user's screenshot showed successful YuE2 Q8_0/F16 and SAM Audio activation,
+but HTDemucs 4/6 stems and BS-RoFormer failed with an input-rate mismatch:
+expected 44,100 Hz, received 48,000 Hz. The native probe generated the same 48 kHz
+test input for every separator. The application separation path already used
+different rates, so the probe did not exercise the same input contract.
+
+The catalog now declares each separator's input rate/channels and copies them
+into its profile. Probes and normal separation use this declaration; older
+profiles keep the mode-format fallback. Real native testing exposed a second
+probe error after fixing the rate: HTDemucs rejects the generic `seed` option.
+The probe now sends only audio to HTDemucs/BS-RoFormer, and text/seed to SAM Audio.
+Setup error hints allow retrying verification rather than always suggesting
+another download.
+
+- Offline regression checks inspect the actual WAV sent by each native probe,
+  permitted request keys, missing input contracts, and a fake separator requiring
+  a different rate from the mode default. Full harness: 45 tests passed.
+- Real Metal probes with existing Q8_0 files passed for HTDemucs 4 stems,
+  HTDemucs 6 stems and BS-RoFormer, each returning nonempty WAV audio at the
+  corrected input contract. Results were saved in
+  `/private/tmp/lux-separation-probe-results.json`.
+- No model weights were downloaded or active Settings changed by these tests.
+  Each test runtime was closed afterwards. This is runtime compatibility evidence,
+  not a listening test or proof of separation quality on real songs.
+- Updated the user's current temporary archive after checking the affected source
+  files matched the committed version. The running app needs a restart before
+  retrying Verify existing files for those three models. Successful profiles and
+  recorded license reviews remain in its settings file.

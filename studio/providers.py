@@ -148,15 +148,19 @@ class AudioCppProvider:
         if profile["task"] == "gen":
             request = self.adapter(profile).smoke_request()
         else:
+            audio_format = profile.get("input_audio", {})
+            sample_rate, channels = audio_format.get("sample_rate"), audio_format.get("channels")
+            if not isinstance(sample_rate, int) or sample_rate <= 0 or channels not in (1, 2):
+                raise ValueError("The catalog must specify a valid input audio format for this separation model.")
             buffer = io.BytesIO()
             with wave.open(buffer, "wb") as audio:
-                audio.setnchannels(2)
+                audio.setnchannels(channels)
                 audio.setsampwidth(2)
-                audio.setframerate(48000)
-                audio.writeframes(b"\0" * 48000 * 2 * 2)
-            request = {"audio_base64": base64.b64encode(buffer.getvalue()).decode(), "seed": 1234}
+                audio.setframerate(sample_rate)
+                audio.writeframes(b"\0" * sample_rate * channels * 2)
+            request = {"audio_base64": base64.b64encode(buffer.getvalue()).decode()}
             if profile["family"] == "sam_audio":
-                request["text"] = "voice"
+                request.update(text="voice", seed=1234)
         data = self.run(profile, request, cancel)
         payload = data.get("audio") or next(iter(data.get("named_audio_outputs", [])), {}).get("audio")
         if not payload:

@@ -104,7 +104,8 @@
       "description": "Download and activate complete model profiles from Settings.",
       "status": "implemented",
       "tests": [
-        "tests.test_models.DownloadTests"
+        "tests.test_models.DownloadTests",
+        "tests.test_providers.NativeProbeTests"
       ],
       "acceptance": [
         "Downloads show progress, failure, cancellation, and retry/resume when supported.",

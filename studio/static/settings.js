@@ -61,7 +61,7 @@ const Settings = (() => {
       return `<div class="model-job"><div class="label-row"><b>${esc(label)}</b><span>${job.stage === "downloading" ? `${percent}%` : esc(job.status)}</span></div>
         ${running ? `<progress ${job.stage === "downloading" ? `value="${percent}"` : ""} max="100"></progress>` : ""}
         <small>${esc(job.file || job.profile_id)}${job.stage === "downloading" ? ` · ${sizes(transferred)} / ${sizes(job.total_bytes)}` : ""}</small>
-        ${job.error ? `<p class="error">${esc(job.error)} Choose Download / repair to retry.</p>` : ""}
+        ${job.error ? `<p class="error">${esc(job.error)} Review the error, then retry verification or repair the files.</p>` : ""}
         ${running ? `<button id="cancel-${job.id}" type="button" class="btn" data-cancel="${esc(job.id)}">Cancel setup</button>` : ""}</div>`;
     }).join("");
     if (focused) document.getElementById(focused)?.focus({ preventScroll: true });

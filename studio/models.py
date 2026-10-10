@@ -83,6 +83,8 @@ class ModelManager:
                 "main_file": None if external else model["precisions"][precision]["path"],
                 "vae_file": model["vaes"][vae_precision]["path"] if vae_precision else None,
                 "licenses": copy.deepcopy(model["licenses"]), "license_review_id": review_id}
+        if model.get("input_audio"):
+            profile["input_audio"] = copy.deepcopy(model["input_audio"])
         profile["capabilities"] = copy.deepcopy(get_provider(profile).adapter(profile).capabilities) if profile["task"] == "gen" else {"separation": True}
         return profile
 

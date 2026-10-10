@@ -94,6 +94,11 @@ implement a third-party service, credentials UI, billing or MiniMax support.
 - Activation requires complete verified files and a valid nonempty WAV from a
   short native probe. Save failure rolls back the in-memory active selection.
   Device/backend or binary fingerprint changes invalidate local readiness.
+- Separation profiles declare input sample rate and channels. Both the probe
+  and song-separation input conversion use that contract: 44,100 Hz for
+  HTDemucs/BS-RoFormer and 48,000 Hz for SAM Audio. Probe request options must
+  match the model API; only SAM Audio receives a text prompt and seed here.
+  Older saved separation profiles retain their mode-format fallback.
 - A source pin describes the supported native build. External binaries record
   their path and compatibility fingerprint, without claiming a known source revision.
 - Provider locks protect a runtime during inference. Queued jobs keep a profile
