@@ -99,6 +99,10 @@ implement a third-party service, credentials UI, billing or MiniMax support.
   HTDemucs/BS-RoFormer and 48,000 Hz for SAM Audio. Probe request options must
   match the model API; only SAM Audio receives a text prompt and seed here.
   Older saved separation profiles retain their mode-format fallback.
+- Restore the active precision/VAE choice and recorded license review in Settings
+  after reload. A verified profile can be selected again without hashing or
+  probing unchanged files. Compare the current release, files, paths and runtime
+  token before reuse. Explicit repair performs full verification again.
 - A source pin describes the supported native build. External binaries record
   their path and compatibility fingerprint, without claiming a known source revision.
 - Provider locks protect a runtime during inference. Queued jobs keep a profile

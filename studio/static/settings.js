@@ -2,7 +2,7 @@
 
 const Settings = (() => {
   let catalog = [], status = { active: null, profiles: [], separators: {}, jobs: [] };
-  const choices = new Map(), accepted = new Set();
+  const choices = new Map(), accepted = new Set(), declined = new Set();
   let error = "", lastCompleted = "", loading = false;
   const sizes = (bytes) => `${(bytes / 1e9).toFixed(2)} GB`;
   const busy = () => status.jobs.some((j) => ["queued", "running"].includes(j.status));
@@ -17,7 +17,8 @@ const Settings = (() => {
   }
 
   function selection(model) {
-    return model.choices.find((c) => c.id === choices.get(model.id)) || model.choices.find((c) => c.precision === model.default_precision && c.vae_precision === model.default_vae) || model.choices[0];
+    const selected = status.active?.model_id === model.id ? status.active.id : Object.values(status.separators).find((id) => model.choices.some((c) => c.id === id));
+    return model.choices.find((c) => c.id === choices.get(model.id)) || model.choices.find((c) => c.id === selected) || model.choices.find((c) => c.precision === model.default_precision && c.vae_precision === model.default_vae) || model.choices[0];
   }
 
   function applyCapabilities() {
@@ -84,9 +85,9 @@ const Settings = (() => {
         <div class="model-licenses"><h4>Licenses — review before downloading</h4>${model.licenses.map((l) => `<p><b>${esc(l.component)}: <a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.id)}</a></b><br>${esc(l.summary)}</p>`).join("")}
         ${licensed ? "" : '<p class="error">License information is incomplete. Downloads are unavailable until this release is reviewed.</p>'}
         <label class="license-accept"><input type="checkbox" id="license-${model.id}" data-license="${choice.license_review_id}" ${checked ? "checked" : ""} ${licensed ? "" : "disabled"}> I have reviewed and accept these component license terms.</label></div>
-        <p class="hint">${active ? "Active generation model" : choice.ready ? "Verified on this computer" : choice.installed ? "Files found — verification required" : "Not installed"} · Release ${esc(model.revision.slice(0, 12))}</p>
+        <p class="hint model-verification">${choice.ready ? active ? "Verified · Active generation model" : "Verified on this computer" : choice.installed ? "Files found — verification required" : "Not installed"} · Release ${esc(model.revision.slice(0, 12))}</p>
         <div class="model-actions"><button type="button" class="btn primary" id="download-${model.id}" data-setup="${model.id}" data-action="${model.delivery === "external" ? "activate" : "download"}" ${busy() || !checked || !licensed ? "disabled" : ""}>${model.delivery === "external" ? "Connect / verify" : "Download / repair and activate"}</button>
-        ${model.delivery === "external" ? "" : `<button type="button" class="btn" id="activate-${model.id}" data-setup="${model.id}" data-action="activate" ${busy() || !checked || !licensed || !choice.installed ? "disabled" : ""}>Verify existing files and activate</button>`}</div></article>`;
+        ${model.delivery === "external" ? "" : `<button type="button" class="btn" id="activate-${model.id}" data-setup="${model.id}" data-action="activate" ${busy() || !checked || !licensed || !choice.installed || active && choice.ready ? "disabled" : ""}>${active && choice.ready ? "Active · Verified" : choice.ready ? "Activate verified model" : "Verify existing files and activate"}</button>`}</div></article>`;
     }).join("");
     progress();
     if (focused) document.getElementById(focused)?.focus({ preventScroll: true });
@@ -100,6 +101,7 @@ const Settings = (() => {
       const completed = next.jobs.filter((j) => !["queued", "running"].includes(j.status)).map((j) => `${j.id}:${j.status}`).join(",");
       const changed = completed !== lastCompleted || next.active?.id !== status.active?.id;
       status = next;
+      for (const review of status.accepted_license_reviews || []) if (!declined.has(review)) accepted.add(review);
       if (reloadCatalog || changed || !catalog.length) catalog = (await request("/api/settings/catalog")).models;
       if (changed) { lastCompleted = completed; loadLibrary(); }
       applyCapabilities();
@@ -112,13 +114,14 @@ const Settings = (() => {
     $("settings").onchange = (event) => {
       const target = event.target;
       if (target.dataset.license) {
-        if (target.checked) accepted.add(target.dataset.license); else accepted.delete(target.dataset.license);
+        if (target.checked) { accepted.add(target.dataset.license); declined.delete(target.dataset.license); }
+        else { accepted.delete(target.dataset.license); declined.add(target.dataset.license); }
       } else {
         const id = target.dataset.precision || target.dataset.vae, model = catalog.find((m) => m.id === id);
         if (!model) return;
         const current = selection(model);
         const choice = model.choices.find((c) => c.precision === (target.dataset.precision ? target.value : current.precision) && c.vae_precision === (target.dataset.vae ? target.value : current.vae_precision));
-        choices.set(id, choice.id); accepted.delete(choice.license_review_id);
+        choices.set(id, choice.id);
       }
       render();
     };

@@ -39,8 +39,8 @@ branch builds on that work. Natural song endings (#1) remain a separate task.
 
 ## Verification
 
-- `.venv/bin/python scripts/check.py --full`: passed, 45 tests total (five harness
-  regressions and 40 application tests). Only natural-song-ending remains planned.
+- `.venv/bin/python scripts/check.py --full`: passed, 49 tests total (five harness
+  regressions and 44 application tests). Only natural-song-ending remains planned.
 - Lock consistency check passed offline (21 packages); `git diff --check` passed.
 - Fresh Python environment: real `uv sync --frozen --python 3.12` succeeded in
   `/private/tmp/lux-fresh-environment` using the existing lock file.
@@ -129,3 +129,26 @@ another download.
   files matched the committed version. The running app needs a restart before
   retrying Verify existing files for those three models. Successful profiles and
   recorded license reviews remain in its settings file.
+
+## Settings persistence and licensing follow-up
+
+The user reported that verification appeared to reset on launch and dropdown
+changes. Their stored profiles and fingerprints were still valid: YuE2 and SAM
+remained ready. The browser reset to catalog defaults, forgot license checkbox
+state, and still offered verification for already verified active profiles.
+
+Settings now restores the active combination and accepted review IDs, retains
+acceptance when a dropdown changes within the same license release, and labels
+active profiles as Verified. Selecting another verified profile reuses its saved
+validation. New files/releases and changed runtime tokens still require checks;
+repair explicitly rechecks. Four new offline cases cover restart/reselection,
+changed release/runtime/files and explicit repair. Full harness: 49 tests passed.
+The isolated browser flow also passed reload/dropdown persistence without
+JavaScript errors. The user's temporary app sources were updated; restart is
+required to load the new backend.
+
+The requested online license double-check found an additional individual creator
+permission in the original GitHub README and MODEL_LICENSE. Personal creators can
+monetize outputs; companies need a commercial weight license. The base weight
+license remains CC BY-NC 4.0. Links and scope are recorded in
+`docs/model-licenses.md`; the pinned GGUF identifier was not relabeled as Apache.

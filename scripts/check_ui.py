@@ -57,6 +57,19 @@ def main():
                     page.locator("#license-test-model").check()
                     page.locator("#download-test-model").click()
                     expect(page.locator("#settings-message")).to_contain_text("Active: Test model · BF16 · VAE F32", timeout=15000)
+                    expect(page.locator("#activate-test-model")).to_have_text("Active · Verified")
+                    expect(page.locator("#activate-test-model")).to_be_disabled()
+                    page.reload()
+                    expect(page.locator("#precision-test-model")).to_have_value("bf16")
+                    expect(page.locator("#vae-test-model")).to_have_value("f32")
+                    expect(page.locator("#license-test-model")).to_be_checked()
+                    expect(page.locator("#activate-test-model")).to_have_text("Active · Verified")
+                    page.locator("#precision-test-model").select_option("q8_0")
+                    expect(page.locator("#license-test-model")).to_be_checked()
+                    expect(page.locator("#activate-test-model")).to_be_disabled()
+                    page.locator("#precision-test-model").select_option("bf16")
+                    expect(page.locator(".model-verification").first).to_contain_text("Verified")
+                    expect(page.locator("#activate-test-model")).to_have_text("Active · Verified")
                     page.screenshot(path=str(args.artifacts / "settings-desktop.png"))
                     page.locator("#nav-create").click()
                     expect(page.locator("#go")).to_be_enabled()
@@ -86,7 +99,7 @@ def main():
                     browser.close()
                 print(json.dumps({"settings_first": True, "license_gate": True, "independent_precision": True,
                                   "fake_download_and_activation": True, "capability_controls": True,
-                                  "generation_and_library": True, "mobile_navigation": True, "external_without_weights": True, "unresolved_license_blocked": True, "javascript_errors": errors}))
+                                  "generation_and_library": True, "mobile_navigation": True, "external_without_weights": True, "verification_survives_reload_and_dropdown": True, "unresolved_license_blocked": True, "javascript_errors": errors}))
             finally:
                 server.terminate()
                 try: server.wait(timeout=10)

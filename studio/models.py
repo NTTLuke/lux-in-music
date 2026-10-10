@@ -115,12 +115,23 @@ class ModelManager:
         except (ValueError, OSError):
             return False
 
+    def verified_profile(self, profile):
+        saved = self.state["profiles"].get(profile["id"])
+        keys = ("revision", "provider", "family", "task", "precision", "vae_precision", "root",
+                "main_file", "vae_file", "files", "licenses", "license_review_id")
+        if not saved or any(saved.get(key) != profile.get(key) for key in keys):
+            return None
+        if saved.get("input_audio") and saved["input_audio"] != profile.get("input_audio"):
+            return None
+        return saved if self.ready(saved) else None
+
     def status(self):
         with self.lock:
             active = self.state["profiles"].get(self.state.get("active"))
             ready = self.ready(active)
             return {"active": copy.deepcopy(active) if ready else None, "setup_required": not ready,
                     "state_error": self.state_error, "separators": copy.deepcopy(self.state["separators"]),
+                    "accepted_license_reviews": list(self.state.get("license_reviews", {})),
                     "profiles": [{"id": p["id"], "capabilities": p.get("capabilities", {}), "ready": self.ready(p)} for p in self.state["profiles"].values()],
                     "jobs": [copy.deepcopy(job) for job in self.jobs.values()]}
 
@@ -132,12 +143,11 @@ class ModelManager:
                 for vae in model["vaes"] or [None]:
                     profile = self.profile(model["id"], precision, vae)
                     states = [self.file_status(profile, file) for file in profile["files"]]
-                    saved = self.state["profiles"].get(profile["id"])
                     choices.append({"id": profile["id"], "precision": precision, "vae_precision": vae,
                                     "bytes": sum(f["size"] for f in profile["files"]),
                                     "missing_bytes": sum(f["size"] for f, state in zip(profile["files"], states) if state == "missing"),
                                     "installed": "missing" not in states,
-                                    "ready": self.ready(saved),
+                                    "ready": bool(self.verified_profile(profile)),
                                     "license_review_id": profile["license_review_id"]})
             result.append({**{k: model[k] for k in ("id", "name", "description", "provider", "task", "revision", "licenses", "default_precision", "default_vae")},
                            "delivery": model.get("delivery", "local"), "choices": choices})
@@ -276,30 +286,12 @@ class ModelManager:
     def _work(self, job, profile, event, download):
         try:
             self._update(job, status="running")
-            if profile["files"]:
-                self.models_dir.mkdir(parents=True, exist_ok=True)
-            remaining = sum(f["size"] for f in profile["files"] if self.file_status(profile, f) == "missing")
-            if download and profile["files"] and shutil.disk_usage(self.models_dir).free < remaining + 64 * 1024 * 1024:
-                raise ValueError("Not enough disk space for these model files")
-            for file in profile["files"]:
-                if event.is_set():
-                    raise Cancelled()
-                path = Path(profile["root"]) / file["path"]
-                self._adopt(profile, file, path, event, job)
-                if download:
-                    path = self._download(profile, file, event, job)
-                elif not path.is_file():
-                    raise ValueError("Required files are missing. Download this profile first.")
-                else:
-                    self._verify(profile, file, path, event, job)
-                with self.lock:
-                    self.state["verified"][str(path)] = {"fingerprint": self.fingerprint(path), "hash": file.get("sha256") or file.get("git_sha1")}
-                    self._save()
-                self._update(job, completed_bytes=job["completed_bytes"] + file["size"], file_bytes=0)
-            self._update(job, stage="testing", file=None)
-            if event.is_set():
-                raise Cancelled()
-            profile["validation"] = get_provider(profile).probe(profile, cancel=event)
+            with self.lock:
+                saved = self.verified_profile(profile) if not download else None
+                if saved:
+                    profile["validation"] = copy.deepcopy(saved["validation"])
+            if not saved:
+                self._prepare_files_and_probe(job, profile, event, download)
             if event.is_set():
                 raise Cancelled()
             with self.lock:
@@ -315,13 +307,39 @@ class ModelManager:
                 except Exception:
                     self.state = previous
                     raise
-            self._update(job, status="done", stage="ready")
+            self._update(job, status="done", stage="ready", completed_bytes=job["total_bytes"])
         except Cancelled:
             self._update(job, status="cancelled", stage="cancelled")
         except Exception as error:
             self._update(job, status="error", stage="error", error=str(error))
         finally:
             self._update(job, finished=time.time())
+
+    def _prepare_files_and_probe(self, job, profile, event, download):
+        if profile["files"]:
+            self.models_dir.mkdir(parents=True, exist_ok=True)
+        remaining = sum(f["size"] for f in profile["files"] if self.file_status(profile, f) == "missing")
+        if download and profile["files"] and shutil.disk_usage(self.models_dir).free < remaining + 64 * 1024 * 1024:
+            raise ValueError("Not enough disk space for these model files")
+        for file in profile["files"]:
+            if event.is_set():
+                raise Cancelled()
+            path = Path(profile["root"]) / file["path"]
+            self._adopt(profile, file, path, event, job)
+            if download:
+                path = self._download(profile, file, event, job)
+            elif not path.is_file():
+                raise ValueError("Required files are missing. Download this profile first.")
+            else:
+                self._verify(profile, file, path, event, job)
+            with self.lock:
+                self.state["verified"][str(path)] = {"fingerprint": self.fingerprint(path), "hash": file.get("sha256") or file.get("git_sha1")}
+                self._save()
+            self._update(job, completed_bytes=job["completed_bytes"] + file["size"], file_bytes=0)
+        self._update(job, stage="testing", file=None)
+        if event.is_set():
+            raise Cancelled()
+        profile["validation"] = get_provider(profile).probe(profile, cancel=event)
 
     def cancel(self, job_id):
         if job_id not in self.events:

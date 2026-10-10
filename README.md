@@ -7,6 +7,9 @@ Local generative music software using models compatible with audio.cpp. The curr
 Model licenses are shown in Settings before any download. YuE2 weights and VAE
 are published under **CC BY-NC 4.0**. Optional separation models have their own
 terms; they are never installed automatically.
+The upstream project also grants additional permission for individual creators
+to monetize outputs. Company use of the weights has separate commercial terms;
+see [the license review and official links](docs/model-licenses.md).
 
 ## Contributing and project direction
 
@@ -68,6 +71,11 @@ already prepared UI; `scripts/run_engine.sh` serves the verified selected profil
 3. Download/repair and activate, or verify existing files. Progress covers
    download, integrity checks and a short inference test on this computer.
 4. Open Create after activation. Only supported model controls are shown.
+
+Verified profiles and license reviews persist across restarts. Returning to a
+verified precision/VAE combination shows its saved status; switching to it uses
+its existing validation. Changed files, releases or runtime binaries require
+verification again. Download / repair remains available for a full recheck.
 
 Downloads can be cancelled and retried; partial files resume when the server
 supports ranges. Invalid files or a failed runtime test preserve the previous

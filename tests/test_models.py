@@ -139,6 +139,44 @@ class DownloadTests(ModelFixtures):
         self.assertFalse(self.requests)
         self.assertTrue(self.manager.snapshot()["root"].endswith("releases/test-release"))
 
+    def test_verified_selection_and_licenses_survive_restart_without_another_probe(self):
+        self.setup_profile("bf16", "f32")
+        self.setup_profile("q8_0", "f16")
+        restored = ModelManager(self.root / "state", self.root / "models", self.catalog)
+        profile = restored.profile("test-model", "bf16", "f32")
+        self.assertIn(profile["license_review_id"], restored.status()["accepted_license_reviews"])
+        self.assertTrue(next(c for c in restored.options()[0]["choices"] if c["id"] == profile["id"])["ready"])
+        with patch.object(restored, "_verify", side_effect=AssertionError("Files were already verified")), \
+             patch.object(self.provider, "probe", side_effect=AssertionError("Profile was already tested")):
+            job = restored.start("test-model", "bf16", "f32", profile["license_review_id"], True, False)
+            restored.threads[-1].join(4)
+        self.assertEqual(restored.jobs[job["id"]]["status"], "done")
+        self.assertEqual(restored.snapshot()["id"], profile["id"])
+
+    def test_new_release_and_runtime_changes_do_not_reuse_old_validation(self):
+        self.setup_profile()
+        self.catalog[0]["revision"] = "new-release"
+        self.assertFalse(any(c["ready"] for c in self.manager.options()[0]["choices"]))
+        self.catalog[0]["revision"] = "test-release"
+        self.provider.token = "another-device"
+        with patch.object(self.provider, "probe", wraps=self.provider.probe) as probe:
+            self.assertEqual(self.setup_profile(download=False)["status"], "done")
+            probe.assert_called_once()
+
+    def test_changed_files_do_not_reuse_the_previous_successful_validation(self):
+        self.setup_profile()
+        profile = self.profile()
+        (Path(profile["root"]) / profile["main_file"]).write_bytes(b"X" * len(self.payloads["main-q8.gguf"]))
+        job = self.setup_profile(download=False)
+        self.assertEqual(job["status"], "error")
+        self.assertIn("Checksum mismatch", job["error"])
+
+    def test_repair_still_performs_full_verification_for_a_ready_profile(self):
+        self.setup_profile()
+        with patch.object(self.provider, "probe", wraps=self.provider.probe) as probe:
+            self.assertEqual(self.setup_profile(download=True)["status"], "done")
+            probe.assert_called_once()
+
     def test_resume_requires_a_valid_range_and_checks_the_completed_file(self):
         profile = self.profile(); file = profile["files"][0]
         part = Path(profile["root"]) / (file["path"] + ".part"); part.parent.mkdir(parents=True)
