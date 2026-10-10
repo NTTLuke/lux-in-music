@@ -1,8 +1,30 @@
 # Project handoff
 
-## Current work: Create layout and genre templates
+## Current work: simple local installation guide
+
+Branch: `docs/simple-local-installation`, based on main after PR #8.
+
+- Reorganized README around five beginner steps for Apple Silicon: prepare
+  Apple's tools, download/extract the GitHub ZIP, enter the folder using Finder
+  drag-and-drop, run `./studio.sh`, choose a model in Settings and create the
+  first example. Explain startup stages, model downloads, license review,
+  reopening, Control + C, file locations and common recovery commands.
+- The example starts with the Melodic Techno demo and its four-minute target;
+  the genre templates reuse those lyrics. Technical architecture, launch
+  options, Linux CPU limitations and contributor commands follow the user guide.
+- Checked commands and button names against `studio.sh`, `scripts/setup.sh`,
+  `studio/launch.py`, the Finder launcher and Settings UI. Installation behavior
+  and model defaults are unchanged. No real setup/download/generation is needed
+  for this documentation update.
+- Verification passed: portable baseline (five harness tests), five offline
+  bootstrap tests, launcher `--help` confirming port/browser flags, and
+  `git diff --check`. No fresh real native build is claimed for this doc change.
+
+## Delivered: Create layout and genre templates
 
 Branch: `feat/create-layout-genre-templates`, based on main after PR #7.
+PR #8 is merged into main (`4f744840ed76f804235f4fdc444845914d5af3b7`), with
+passing CI, after the user accepted the templates and shared lyric text.
 
 - Create is 520 px wide on large desktop screens (previously 440 px), with
   the remaining width assigned to Library. Medium screens use a bounded
