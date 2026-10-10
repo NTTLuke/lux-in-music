@@ -1,8 +1,190 @@
-# Lux In Music: local POC
+# Lux In Music
 
-Local generative music software using models compatible with audio.cpp. The current prototype uses
-[YuE2-3B GGUF](https://huggingface.co/audio-cpp/Yue2-3B-GGUF) through
-[audio.cpp](https://github.com/0xShug0/audio.cpp) (Metal on Apple Silicon).
+Create songs from lyrics and a musical style, then listen to them in your browser.
+Lux runs on your own computer. It is a prototype, with real audio tests on a Mac
+with Apple Silicon, using YuE2 through audio.cpp.
+
+You do not need to write code to install it. Follow the steps below in order.
+
+## Hear the Complete Demo
+
+**Lux In Tenebris — Complete Demo** · Dance / Melodic Techno · **3:58**
+
+A full song created locally with Lux, using YuE2 Q8_0 and the F16 VAE.
+Press Play and enable sound to hear the original ending.
+
+https://github.com/user-attachments/assets/51a82812-f433-4d41-804c-e34d2c7c23a7
+
+[Install on a Mac](#install-on-a-mac) · [Open it again](#open-it-again-and-stop-it) ·
+[Get help](#if-something-goes-wrong) · [Technical reference](#technical-reference)
+
+## Install on a Mac
+
+### Before you start
+
+- A Mac with **Apple Silicon**: open the Apple menu → **About This Mac** and
+  look for an Apple chip whose name starts with **M**.
+- An internet connection for the first installation and model download.
+- Free disk space for the app, a model and your songs. The default YuE2 model
+  files take about **4.5 GB**, in addition to the software and generated audio.
+  Model file size is not the total memory needed to run it.
+- Access to [this GitHub repository](https://github.com/NTTLuke/lux-in-music).
+  If GitHub shows a missing page, sign in with an account that has access.
+
+This guide covers macOS on Apple Silicon. Linux has a CPU setup path described
+[in the technical reference](#other-platforms); a native Windows installer is
+not provided.
+
+### 1. Prepare your Mac — once
+
+Open **Terminal**: press **Command + Space**, type **Terminal**, then press Return.
+
+Copy this command into Terminal and press Return:
+
+```bash
+xcode-select --install
+```
+
+Follow Apple's installation window and wait for it to finish. These are the
+Apple tools that Lux needs to prepare its audio engine. If Terminal says they
+are already installed, continue to step 2.
+
+### 2. Download Lux In Music
+
+1. Open [Lux In Music on GitHub](https://github.com/NTTLuke/lux-in-music).
+2. Click the green **Code** button, then **Download ZIP**.
+3. In Finder, open **Downloads** and double-click the ZIP to extract it, if it
+   has not been extracted already.
+4. Move the extracted project folder to a permanent location you can find again,
+   such as **Documents**. It contains a file called **studio.sh**. Use this same
+   folder for future launches.
+
+### 3. Start Lux and let it install the software
+
+In Terminal, go into the folder you just extracted:
+
+1. Type `cd`, then press the Space key.
+2. Drag the extracted project folder from Finder onto the Terminal window.
+3. Press Return. Terminal is now working inside that folder.
+
+Copy this command into Terminal and press Return:
+
+```bash
+./studio.sh
+```
+
+On the first launch, Lux automatically prepares Python, its software dependencies
+and the audio engine. **You do not need to install Python, uv, CMake or Homebrew
+separately.** This step can take several minutes.
+
+Terminal shows four stages:
+
+| Stage | What happens |
+| --- | --- |
+| 1/4 | Check the required tools |
+| 2/4 | Prepare Python and the app |
+| 3/4 | Download and build the audio engine |
+| 4/4 | Start Lux and open your browser |
+
+Many lines of build output are normal. Wait until the app starts, and keep
+Terminal open while you use Lux. If the browser does not open, visit
+[http://127.0.0.1:8000](http://127.0.0.1:8000) after stage 4.
+
+**This installs software only. Models are chosen separately in Settings.**
+
+### 4. Choose your first music model
+
+The first launch opens **Settings** because no model is active yet. A model is
+what creates the music; its files must be downloaded before you can create songs.
+
+1. Find the **YuE2-3B** card under **Models & Settings**.
+2. For the first setup, leave **Main model precision: Q8_0** and
+   **VAE precision: F16 (default)**. These are the combination used in the
+   project's recorded Mac audio tests. Other choices use different amounts of
+   storage and memory; the app tests a choice before activating it.
+3. Open the license links and review the terms. If you accept them, tick
+   **I have reviewed and accept these component license terms**.
+4. Click **Download and activate**. If you already have the model files,
+   the button can say **Verify and activate** instead.
+5. Watch progress in that card. Wait for **Active · Verified**.
+
+The download and short compatibility test can take a while. You can cancel and
+retry a download. Optional separation models are for splitting a song into
+vocals and instruments; you can leave them uninstalled for now.
+
+Read [the model license notes](docs/model-licenses.md) before choosing a model
+for commercial use. Licenses are shown before each download.
+
+### 5. Create your first song
+
+1. Click **Create** in the sidebar.
+2. Click **Demo · Melodic Techno** to load the example lyrics and a four-minute
+   arrangement. To try a different sound, open **Genre templates** and choose
+   one of five styles. They use the same example lyrics.
+3. Keep **Complete arrangement** selected and the duration at **4:00** for this
+   example. This plans a song to finish near the selected duration.
+4. Click the **Create** button at the bottom of the form and wait for the job
+   to finish. Progress shows planning, composing and rendering.
+5. Your song appears in **Library**. Click it to listen, or use its download
+   button to save the WAV audio file.
+
+Loading a demo or template does not generate music until you press **Create**.
+If the lyrics need more time than you selected, Lux explains how to shorten the
+text or choose a longer duration. Duration is approximate; check each result by
+listening to its ending. You can edit the lyrics for your own songs.
+**Clip / hard limit** deliberately allows cutting a song at the selected limit.
+
+## Open it again and stop it
+
+Keep the project folder: it holds the downloaded models, settings and songs.
+You do not need to download another copy for each session.
+
+On your Mac, double-click **Lux In Music.command** inside the project folder.
+You can also open Terminal, enter that folder as in step 3, and run:
+
+```bash
+./studio.sh
+```
+
+Later launches reuse the installed software and models. Once a model is active,
+Lux opens Create directly. Settings remembers your model and license review.
+
+To stop Lux, return to its Terminal window and press **Control + C**.
+Closing the browser tab leaves the app running in Terminal.
+
+## If something goes wrong
+
+| What you see | What to do |
+| --- | --- |
+| `Permission denied` when starting `studio.sh` | In the project folder, run the permission command below, then run `./studio.sh` again. |
+| `No such file or directory` | Repeat step 3. Drag the folder that contains `studio.sh` into Terminal. |
+| Apple Command Line Tools are required | Complete step 1, then start Lux again. |
+| Setup stopped or a download failed | Read the error immediately above it. Fix that problem or restore your internet connection, then rerun `./studio.sh`. Retry a model download from Settings. |
+| The browser did not open | Wait for stage 4, then open [http://127.0.0.1:8000](http://127.0.0.1:8000) yourself. |
+| `Address already in use` | An app is using port 8000. Stop your previous Lux Terminal with Control + C, or use the alternate-port command below. |
+| Create is disabled | Open Settings and finish activating a generation model. Its card must say **Active · Verified**. |
+| A model needs verification or reports an error | Try **Verify and activate**. **Maintenance → Repair / recheck files** checks the files again. Keep the error text if you need help. |
+
+If the downloaded scripts do not have permission to start, run:
+
+```bash
+chmod +x studio.sh scripts/setup.sh "Lux In Music.command"
+```
+
+To use another port, run:
+
+```bash
+./studio.sh --port 8001
+```
+
+The browser address is then [http://127.0.0.1:8001](http://127.0.0.1:8001).
+
+For help, open [an issue](https://github.com/NTTLuke/lux-in-music/issues) and include
+your Mac chip, memory, what step failed and the last relevant Terminal error lines.
+Your songs are saved in the **outputs** folder inside the project; keep that
+folder when backing up your work.
+
+## Model licenses
 
 Model licenses are shown in Settings before any download. YuE2 weights and VAE
 are published under **CC BY-NC 4.0**. Optional separation models have their own
@@ -11,7 +193,9 @@ The upstream project also grants additional permission for individual creators
 to monetize outputs. Company use of the weights has separate commercial terms;
 see [the license review and official links](docs/model-licenses.md).
 
-## Contributing and project direction
+## Technical reference
+
+### Contributing and project direction
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Any coding
 CLI can use the shared instructions and run `python3 scripts/check.py`. See
@@ -23,7 +207,7 @@ scenarios in [harness/requirements.json](harness/requirements.json). Natural son
 ending work (#1) now plans and checks EOS near the target before rendering, with
 a real audio test and user listening acceptance. Clip mode can still cut off a song.
 
-## Architecture
+### Architecture
 
 ```
 browser ──► studio (FastAPI :8000) ──► provider + model adapter ──► selected runtime
@@ -41,29 +225,34 @@ browser ──► studio (FastAPI :8000) ──► provider + model adapter ─�
 * `studio/app.py` + `studio/static/index.html`: web studio
 * `studio/cli.py`: generate one song from the terminal
 
-## Run
+### Advanced launch options
+
+`./studio.sh` is the main launcher. `NO_OPEN=1 ./studio.sh` skips opening the
+browser, and `./studio.sh --port 8001` changes the port. `scripts/setup.sh`
+prepares software only; `scripts/run_studio.sh` starts an already prepared UI.
+`scripts/run_engine.sh` serves the verified selected profile.
+
+uv is installed locally if missing, Python 3.12 is prepared through uv, and
+CMake 3.31.6 is supplied when needed. Source submodules use HTTPS, without a
+GitHub SSH key. Startup downloads no model weights. The UI binds to
+`127.0.0.1`, and Control + C stops it and its owned inference processes.
+
+### Other platforms
+
+Linux startup selects the CPU build. It requires Bash, curl, Git and a C/C++
+compiler; for example, an Ubuntu/Debian installation can prepare them with:
 
 ```bash
-./studio.sh       # install missing software, start the UI, open Settings if no model is ready
+sudo apt update
+sudo apt install build-essential curl git
 ```
 
-The terminal shows four startup stages: prerequisites, Python/dependencies,
-native runtime download/build, and UI startup. First-run software setup needs
-network access, `curl`, `git`, and a C++ compiler. On macOS, install Apple's
-Command Line Tools if requested (`xcode-select --install`). uv is installed
-locally when missing; Python 3.12 and CMake are prepared when needed. Linux uses
-the CPU build. Later runs reuse installed dependencies and a compatible build.
-Source submodules are fetched over HTTPS; public source setup needs no GitHub
-SSH key. If setup stops, rerun the same command to continue.
+Then enter the project folder and run `./studio.sh`. The script prepares Python,
+CMake if needed, and the CPU runtime. Real hardware/audio verification in this
+project has been on Apple Silicon; Linux CPU performance and compatibility are
+not claimed as tested. Native Windows startup is not implemented.
 
-No model weights are downloaded during startup. The UI opens at
-http://127.0.0.1:8000. Ctrl+C stops the UI and its owned inference processes.
-Or double-click **`Lux In Music.command`** in Finder. Use `NO_OPEN=1 ./studio.sh`
-to skip the browser, or `./studio.sh --port 8001` to change the UI port.
-`scripts/setup.sh` runs software setup alone. `scripts/run_studio.sh` starts an
-already prepared UI; `scripts/run_engine.sh` serves the verified selected profile.
-
-### Settings: choose and install models
+### Model setup details
 
 1. Choose a generation model. YuE2 main choices are Q8_0, BF16 and Q4_0; choose
    the VAE separately (F16 by default, or F32). BF16 is different from FP16.

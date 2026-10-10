@@ -1,8 +1,45 @@
 # Project handoff
 
-## Current work: Create layout and genre templates
+## Current work: simple local installation guide
+
+Branch: `docs/simple-local-installation`, based on main after PR #8.
+
+- Reorganized README around five beginner steps for Apple Silicon: prepare
+  Apple's tools, download/extract the GitHub ZIP, enter the folder using Finder
+  drag-and-drop, run `./studio.sh`, choose a model in Settings and create the
+  first example. Explain startup stages, model downloads, license review,
+  reopening, Control + C, file locations and common recovery commands.
+- The example starts with the Melodic Techno demo and its four-minute target;
+  the genre templates reuse those lyrics. Technical architecture, launch
+  options, Linux CPU limitations and contributor commands follow the user guide.
+- Checked commands and button names against `studio.sh`, `scripts/setup.sh`,
+  `studio/launch.py`, the Finder launcher and Settings UI. Installation behavior
+  and model defaults are unchanged. No real setup/download/generation is needed
+  for this documentation update.
+- Verification passed: portable baseline (five harness tests), five offline
+  bootstrap tests, launcher `--help` confirming port/browser flags, and
+  `git diff --check`. No fresh real native build is claimed for this doc change.
+- The user also requested a playable README preview and explicitly authorized
+  uploading only the accepted Complete Demo. Uploaded one 6.49 MB H.264/AAC
+  MP4 attachment with a static cover and the full song (about 237.5 seconds,
+  48 kHz stereo). Source WAV remains in the local Library; no model files,
+  other songs, settings or runtime artifacts were uploaded. The media file is
+  an attachment, outside Git history and installation ZIPs.
+- Preview attachment: https://github.com/user-attachments/assets/51a82812-f433-4d41-804c-e34d2c7c23a7
+  Native GitHub video rendering uses the standalone attachment URL in README.
+  Repository access is required while this repository is private.
+- GitHub's Markdown renderer returned a native video element with controls.
+  Chrome loaded the uploaded 1280×720 media, reported a 237.5-second duration,
+  played it and reached the end after seeking to the final seconds, with no
+  media error. GitHub starts it muted, so README explicitly says to enable sound.
+  This is remote playback verification; human listening acceptance belongs to
+  the original full-song test recorded below. No signed media URLs are committed.
+
+## Delivered: Create layout and genre templates
 
 Branch: `feat/create-layout-genre-templates`, based on main after PR #7.
+PR #8 is merged into main (`4f744840ed76f804235f4fdc444845914d5af3b7`), with
+passing CI, after the user accepted the templates and shared lyric text.
 
 - Create is 520 px wide on large desktop screens (previously 440 px), with
   the remaining width assigned to Library. Medium screens use a bounded
