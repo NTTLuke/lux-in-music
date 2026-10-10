@@ -1,14 +1,16 @@
 # Project handoff
 
-## Current task
+## Delivered scope
 
-Branch: `feat/model-manager-bootstrap`, based on `feat/model-settings-harness`.
+Implementation branches: `feat/model-settings-harness` and
+`feat/model-manager-bootstrap`.
 Scope: #2 provider/model independence and #3 Settings, licenses, downloads and
 precision choices. The user also requested first-run software installation from
 `studio.sh`, with visible progress and no automatic model downloads.
 
-The naming cleanup and portable contributor harness are in draft PR #5. This
-branch builds on that work. Natural song endings (#1) remain a separate task.
+The naming cleanup and portable contributor harness are delivered through PR #5;
+model setup, provider boundaries and their follow-up fixes are delivered through
+PR #6. Natural song endings (#1) remain a separate task.
 
 ## Changes
 
@@ -75,7 +77,7 @@ branch builds on that work. Natural song endings (#1) remain a separate task.
 - Additional providers need concrete adapters, catalog entries and capability
   tests. External service authentication and billing have not been implemented.
 - CI runs portable and offline application checks. Native GPU and browser checks
-  remain separate; verify the remote CI result after publishing this branch.
+  remain separate. Push and PR checks passed for the final implementation revision.
 
 ## First-run SSH failure follow-up
 
