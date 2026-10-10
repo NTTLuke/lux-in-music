@@ -1,0 +1,249 @@
+{
+  "schema_version": 1,
+  "models": [
+    {
+      "id": "yue2-3b",
+      "name": "YuE2-3B",
+      "provider": "audio.cpp",
+      "family": "yue2",
+      "task": "gen",
+      "revision": "cca74d8980c00f30ab8d52248a367c01ad633ec2",
+      "install_dir": "Yue2-3B-GGUF",
+      "description": "Lyrics and style to stereo songs, with optional score planning.",
+      "precisions": {
+        "q8_0": {
+          "path": "yue2-3b-q8_0.gguf",
+          "size": 4264195616,
+          "sha256": "52be345b5155bf9ef0b2411e7df8d1d2b8e13b6d977a2f70c35612ec69b1f591",
+          "git_sha1": null,
+          "url": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/resolve/cca74d8980c00f30ab8d52248a367c01ad633ec2/yue2-3b-q8_0.gguf"
+        },
+        "bf16": {
+          "path": "yue2-3b-bf16.gguf",
+          "size": 7261484576,
+          "sha256": "4cf3fdffbaaed2d8e30a3122ac7cd27d0c96f8921805f173da9758c685b3c7d6",
+          "git_sha1": null,
+          "url": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/resolve/cca74d8980c00f30ab8d52248a367c01ad633ec2/yue2-3b-bf16.gguf"
+        },
+        "q4_0": {
+          "path": "yue2-3b-q4_0.gguf",
+          "size": 2665641504,
+          "sha256": "b80215b59a7fe41a4c76b6163c0ae1031672f892b5951d66fefaa2053a815029",
+          "git_sha1": null,
+          "url": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/resolve/cca74d8980c00f30ab8d52248a367c01ad633ec2/yue2-3b-q4_0.gguf"
+        }
+      },
+      "vaes": {
+        "f16": {
+          "path": "yue2-vae-f16.gguf",
+          "size": 265218656,
+          "sha256": "d4f4a05d8f291ae820cd1e43609da3fa91b56465810091a2b08c3350b751719d",
+          "git_sha1": null,
+          "url": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/resolve/cca74d8980c00f30ab8d52248a367c01ad633ec2/yue2-vae-f16.gguf"
+        },
+        "f32": {
+          "path": "yue2-vae-f32.gguf",
+          "size": 530537760,
+          "sha256": "cf3b71c6ef13b8b7970f8c1013b899e4af6ff9756c93bda45bef542dd6e10546",
+          "git_sha1": null,
+          "url": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/resolve/cca74d8980c00f30ab8d52248a367c01ad633ec2/yue2-vae-f32.gguf"
+        }
+      },
+      "default_precision": "q8_0",
+      "default_vae": "f16",
+      "required": [
+        {
+          "path": "sidecars/yue2-generation-config.json",
+          "size": 466,
+          "sha256": null,
+          "git_sha1": "f8214009f5bb5425319e4519b12e4853ad72acf3",
+          "url": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/resolve/cca74d8980c00f30ab8d52248a367c01ad633ec2/sidecars/yue2-generation-config.json"
+        },
+        {
+          "path": "sidecars/yue2-model-config.json",
+          "size": 959,
+          "sha256": null,
+          "git_sha1": "9584e50ba9d6e487690544e14dd7555edbe27973",
+          "url": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/resolve/cca74d8980c00f30ab8d52248a367c01ad633ec2/sidecars/yue2-model-config.json"
+        },
+        {
+          "path": "sidecars/yue2-qwen.tiktoken",
+          "size": 2561218,
+          "sha256": null,
+          "git_sha1": "9b9b0e0416d84d7c88333eb261c77e5fe2d7f7be",
+          "url": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/resolve/cca74d8980c00f30ab8d52248a367c01ad633ec2/sidecars/yue2-qwen.tiktoken"
+        },
+        {
+          "path": "sidecars/yue2-vae-config.json",
+          "size": 1378,
+          "sha256": null,
+          "git_sha1": "f68832bef1b99f53dd70460f6b0d336971a664b8",
+          "url": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/resolve/cca74d8980c00f30ab8d52248a367c01ad633ec2/sidecars/yue2-vae-config.json"
+        }
+      ],
+      "licenses": [
+        {
+          "component": "Main model",
+          "id": "CC-BY-NC-4.0",
+          "url": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/blob/cca74d8980c00f30ab8d52248a367c01ad633ec2/README.md",
+          "summary": "Attribution required. Noncommercial use only. Review the full terms before use or redistribution.",
+          "verified": true,
+          "release_revision": "cca74d8980c00f30ab8d52248a367c01ad633ec2"
+        },
+        {
+          "component": "VAE",
+          "id": "CC-BY-NC-4.0",
+          "url": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/blob/cca74d8980c00f30ab8d52248a367c01ad633ec2/README.md",
+          "summary": "Attribution required. Noncommercial use only. Review the full terms before use or redistribution.",
+          "verified": true,
+          "release_revision": "cca74d8980c00f30ab8d52248a367c01ad633ec2",
+          "upstream_source": "https://huggingface.co/m-a-p/YuE2-Vae"
+        }
+      ]
+    },
+    {
+      "id": "bs-roformer",
+      "name": "BS-RoFormer vocals",
+      "provider": "audio.cpp",
+      "family": "bs_roformer",
+      "task": "sep",
+      "mode_id": "vocals",
+      "revision": "e479ac197bae727f69574261a8025696bc51de48",
+      "install_dir": "sep",
+      "description": "Optional stem separation. Download independently from music generation.",
+      "precisions": {
+        "q8_0": {
+          "path": "BS-RoFormer-ep368-GGUF/bs-roformer-ep368-q8_0.gguf",
+          "size": 172532256,
+          "sha256": "9a55a8cad369d00f6e0fb208bb0cd87e30e25430772b8491e20a4eace6423ad2",
+          "git_sha1": null,
+          "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/e479ac197bae727f69574261a8025696bc51de48/BS-RoFormer-ep368-GGUF/bs-roformer-ep368-q8_0.gguf"
+        }
+      },
+      "vaes": {},
+      "default_precision": "q8_0",
+      "default_vae": null,
+      "required": [],
+      "licenses": [
+        {
+          "component": "Separation model",
+          "id": "Apache-2.0",
+          "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/blob/e479ac197bae727f69574261a8025696bc51de48/README.md",
+          "summary": "Publisher reports Apache-2.0; original checkpoint provenance is undocumented. Review the release notes.",
+          "verified": true,
+          "release_revision": "e479ac197bae727f69574261a8025696bc51de48"
+        }
+      ]
+    },
+    {
+      "id": "htdemucs-6stems",
+      "name": "HTDemucs 6 stems",
+      "provider": "audio.cpp",
+      "family": "htdemucs_6stems",
+      "task": "sep",
+      "mode_id": "6stems",
+      "revision": "e479ac197bae727f69574261a8025696bc51de48",
+      "install_dir": "sep",
+      "description": "Optional stem separation. Download independently from music generation.",
+      "precisions": {
+        "q8_0": {
+          "path": "HTDemucs-6stems-GGUF/htdemucs-6stems-q8_0.gguf",
+          "size": 42477600,
+          "sha256": "71f3d65681a25c28fbf6278fee579f810312eae47d3b26eb04bcd77c77934c0d",
+          "git_sha1": null,
+          "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/e479ac197bae727f69574261a8025696bc51de48/HTDemucs-6stems-GGUF/htdemucs-6stems-q8_0.gguf"
+        }
+      },
+      "vaes": {},
+      "default_precision": "q8_0",
+      "default_vae": null,
+      "required": [],
+      "licenses": [
+        {
+          "component": "Separation model",
+          "id": "MIT",
+          "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/blob/e479ac197bae727f69574261a8025696bc51de48/README.md",
+          "summary": "Preserve the copyright and license notice when redistributing. Review the full terms.",
+          "verified": true,
+          "release_revision": "e479ac197bae727f69574261a8025696bc51de48"
+        }
+      ]
+    },
+    {
+      "id": "htdemucs",
+      "name": "HTDemucs 4 stems",
+      "provider": "audio.cpp",
+      "family": "htdemucs",
+      "task": "sep",
+      "mode_id": "4stems",
+      "revision": "e479ac197bae727f69574261a8025696bc51de48",
+      "install_dir": "sep",
+      "description": "Optional stem separation. Download independently from music generation.",
+      "precisions": {
+        "q8_0": {
+          "path": "HTDemucs-GGUF/htdemucs-q8_0.gguf",
+          "size": 61940768,
+          "sha256": "b0f532ac6e5f373aeb11fa0df73253251e133832d9c8b9942dc58f50bc5b4388",
+          "git_sha1": null,
+          "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/e479ac197bae727f69574261a8025696bc51de48/HTDemucs-GGUF/htdemucs-q8_0.gguf"
+        }
+      },
+      "vaes": {},
+      "default_precision": "q8_0",
+      "default_vae": null,
+      "required": [],
+      "licenses": [
+        {
+          "component": "Separation model",
+          "id": "MIT",
+          "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/blob/e479ac197bae727f69574261a8025696bc51de48/README.md",
+          "summary": "Preserve the copyright and license notice when redistributing. Review the full terms.",
+          "verified": true,
+          "release_revision": "e479ac197bae727f69574261a8025696bc51de48"
+        }
+      ]
+    },
+    {
+      "id": "sam-audio",
+      "name": "SAM Audio base",
+      "provider": "audio.cpp",
+      "family": "sam_audio",
+      "task": "s2s",
+      "mode_id": "anything",
+      "revision": "d429aa7d3a8a5a41ad05d83a57177a98e596ee7f",
+      "install_dir": "sep/SAM-Audio-GGUF",
+      "description": "Optional separation of a sound described in text.",
+      "precisions": {
+        "q8_0": {
+          "path": "sam-audio-base-q8_0.gguf",
+          "size": 3095951072,
+          "sha256": "e5529e940218981b67be2c58904ffca7b7eecba20b65e2e99e7d23eb5eb7bd9b",
+          "git_sha1": null,
+          "url": "https://huggingface.co/audio-cpp/SAM-Audio-GGUF/resolve/d429aa7d3a8a5a41ad05d83a57177a98e596ee7f/sam-audio-base-q8_0.gguf"
+        }
+      },
+      "vaes": {},
+      "default_precision": "q8_0",
+      "default_vae": null,
+      "required": [],
+      "licenses": [
+        {
+          "component": "SAM Audio weights",
+          "id": "SAM License",
+          "url": "https://huggingface.co/audio-cpp/SAM-Audio-GGUF/blob/d429aa7d3a8a5a41ad05d83a57177a98e596ee7f/LICENSE",
+          "summary": "Custom Meta terms. Read the permitted use and redistribution conditions.",
+          "verified": true,
+          "release_revision": "d429aa7d3a8a5a41ad05d83a57177a98e596ee7f"
+        },
+        {
+          "component": "Included T5 encoder",
+          "id": "Apache-2.0",
+          "url": "https://huggingface.co/audio-cpp/SAM-Audio-GGUF/blob/d429aa7d3a8a5a41ad05d83a57177a98e596ee7f/LICENSE-T5",
+          "summary": "Preserve required notices and review the full Apache license.",
+          "verified": true,
+          "release_revision": "d429aa7d3a8a5a41ad05d83a57177a98e596ee7f"
+        }
+      ]
+    }
+  ]
+}

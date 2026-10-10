@@ -19,3 +19,9 @@ jobs:
           python-version: '3.12'
       - name: Run portable contributor harness
         run: python scripts/check.py
+      - name: Install locked application dependencies (no models)
+        run: |
+          python -m pip install uv==0.10.10
+          uv sync --frozen --python 3.12
+      - name: Run offline application acceptance tests
+        run: .venv/bin/python scripts/check.py --full

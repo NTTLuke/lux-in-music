@@ -9,9 +9,11 @@
 <link rel="stylesheet" href="/static/app.css">
 <link rel="stylesheet" href="/static/lux.css">
 <link rel="stylesheet" href="/static/theme-lux.css">
+<link rel="stylesheet" href="/static/settings.css">
 </head>
 <body>
 <div class="glow g1"></div><div class="glow g2"></div><div class="glow g3"></div>
+<nav class="mobile-nav" aria-label="Studio navigation"><a href="#/">Create &amp; Library</a><a href="#/settings">Settings</a><a href="#/lux">Studio Mode</a></nav>
 
 <div class="app">
   <!-- Sidebar -->
@@ -23,14 +25,22 @@
     <nav>
       <a class="active" href="#/" id="nav-create"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create <span class="count" id="lib-count">0</span></a>
       <a href="#/lux" id="nav-lux"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/><path d="M3 17.5l9 5 9-5" opacity=".5"/></svg>Studio Mode <span class="new-badge">NEW</span></a>
+      <a href="#/settings" id="nav-settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.5 5.5l2 2M16.5 16.5l2 2M5.5 18.5l2-2M16.5 7.5l2-2"/></svg>Settings</a>
     </nav>
     <div class="side-foot">
       <div class="engine" id="engine"><span class="dot"></span><span id="engine-text">Connecting…</span></div>
-      <div class="license">Model: CC BY-NC 4.0</div>
+      <div class="license" id="model-license">No generation model selected</div>
     </div>
   </aside>
 
   <!-- Create panel -->
+  <section class="settings" id="settings">
+    <h1>Models &amp; Settings</h1>
+    <p>Choose a music model and review its licenses before downloading. Separation models are optional and installed independently.</p>
+    <p id="settings-message" role="status" aria-live="polite">Checking model setup…</p>
+    <div id="model-progress" aria-live="polite"></div>
+    <div id="model-cards" class="model-cards"></div>
+  </section>
   <section class="create">
     <form id="form" autocomplete="off">
       <div class="demo-row" id="demo-row"></div>
@@ -147,6 +157,7 @@ Sing with the sunrise, we are never alone.</textarea>
   </div>
 </footer>
 <audio id="audio" preload="auto"></audio>
+<script src="/static/settings.js"></script>
 <script src="/static/app.js"></script>
 <script src="/static/lux.js"></script>
 </body>

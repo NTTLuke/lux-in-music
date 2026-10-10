@@ -4,7 +4,9 @@ Local generative music software using models compatible with audio.cpp. The curr
 [YuE2-3B GGUF](https://huggingface.co/audio-cpp/Yue2-3B-GGUF) through
 [audio.cpp](https://github.com/0xShug0/audio.cpp) (Metal on Apple Silicon).
 
-> Model license: **CC BY-NC 4.0**, so non-commercial use only.
+Model licenses are shown in Settings before any download. YuE2 weights and VAE
+are published under **CC BY-NC 4.0**. Optional separation models have their own
+terms; they are never installed automatically.
 
 ## Contributing and project direction
 
@@ -12,38 +14,71 @@ Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Any co
 CLI can use the shared instructions and run `python3 scripts/check.py`. See
 [the harness guide](docs/harness.md) for application checks and CLI compatibility.
 
-The [architecture contract](docs/architecture.md) defines the migration toward
-model-independent adapters and Settings: a fresh install will start without
-weights, show model/component licenses before download, and let the user choose
-main-model and VAE precision independently. These features are **planned**;
-the current launch/setup behavior is documented below. Track their acceptance
-scenarios in [harness/requirements.json](harness/requirements.json).
+The [architecture contract](docs/architecture.md) explains provider/model adapters,
+Settings, independent precision choices, and profile records. Track acceptance
+scenarios in [harness/requirements.json](harness/requirements.json). Natural song
+endings remain a separate open task (#1); a duration cap can still cut off a song.
 
 ## Architecture
 
 ```
-browser ──► studio (FastAPI :8000) ──► audiocpp_server (:8089, Metal) ──► YuE2 Q8 + VAE F16
-              │  job queue, library        POST /v1/tasks/run
-              └► outputs/<name>.wav | .json (params) | .abc (score, cot=melody/full)
+browser ──► studio (FastAPI :8000) ──► provider + model adapter ──► selected runtime
+              │  Settings, queue, library                         lazy start
+              └► outputs/<name>.wav | .json (profile + params) | model artifacts
 ```
 
-* `vendor/audio.cpp/`: the inference engine, built from source with only the `yue2` family
-* `models/Yue2-3B-GGUF/`: `yue2-3b-q8_0.gguf`, `yue2-vae-f16.gguf` and `sidecars/`
-* `config/audiocpp-server.json`: engine config. Paths are relative to this file
-* `studio/params.py`: typed YuE2 parameters, mirroring `vendor/audio.cpp/docs/models/yue2.md`
-* `studio/engine.py`: client for the engine. Saves the WAV, metadata and artifacts
+* `vendor/audio.cpp/`: pinned inference engine, built for the catalog's local families
+* `config/model-catalog.json`: pinned downloads, file sizes/checksums and component licenses
+* `models/<model>/releases/<revision>/`: verified local artifacts; older downloads are reused
+* `.lux/settings.json`: selected profiles, license reviews and verification records
+* `.lux/runtime/`: generated runtime configs/logs; generation and separation use dynamic ports
+* `studio/providers.py` + `studio/adapters/`: runtime lifecycle and model-specific behavior
+* `studio/params.py` + `studio/engine.py`: shared inputs, WAV storage and profile metadata
 * `studio/app.py` + `studio/static/index.html`: web studio
 * `studio/cli.py`: generate one song from the terminal
 
 ## Run
 
 ```bash
-scripts/setup.sh   # one time: build engine, download ~4.5 GB weights, uv sync
-./studio.sh        # starts engine + studio, opens http://127.0.0.1:8000 (Ctrl+C stops both)
+./studio.sh       # install missing software, start the UI, open Settings if no model is ready
 ```
 
-Or double-click **`Lux In Music.command`** in Finder.
-`scripts/run_engine.sh` / `scripts/run_studio.sh` still start each piece on its own.
+The terminal shows four startup stages: prerequisites, Python/dependencies,
+native runtime download/build, and UI startup. First-run software setup needs
+network access, `curl`, `git`, and a C++ compiler. On macOS, install Apple's
+Command Line Tools if requested (`xcode-select --install`). uv is installed
+locally when missing; Python 3.12 and CMake are prepared when needed. Linux uses
+the CPU build. Later runs reuse installed dependencies and a compatible build.
+
+No model weights are downloaded during startup. The UI opens at
+http://127.0.0.1:8000. Ctrl+C stops the UI and its owned inference processes.
+Or double-click **`Lux In Music.command`** in Finder. Use `NO_OPEN=1 ./studio.sh`
+to skip the browser, or `./studio.sh --port 8001` to change the UI port.
+`scripts/setup.sh` runs software setup alone. `scripts/run_studio.sh` starts an
+already prepared UI; `scripts/run_engine.sh` serves the verified selected profile.
+
+### Settings: choose and install models
+
+1. Choose a generation model. YuE2 main choices are Q8_0, BF16 and Q4_0; choose
+   the VAE separately (F16 by default, or F32). BF16 is different from FP16.
+2. Review the component licenses and acknowledge the exact release. Unknown
+   licenses block setup. Displayed file sizes exclude extra runtime memory.
+3. Download/repair and activate, or verify existing files. Progress covers
+   download, integrity checks and a short inference test on this computer.
+4. Open Create after activation. Only supported model controls are shown.
+
+Downloads can be cancelled and retried; partial files resume when the server
+supports ranges. Invalid files or a failed runtime test preserve the previous
+selection. Existing downloads in the old model folder are verified and reused.
+Optional separation models are installed and selected independently in Settings.
+Saved songs remain playable without any active model. Editing needs their original
+compatible generation/separation profiles. Changing Settings affects new jobs;
+queued jobs retain their recorded selection.
+
+The provider boundary also supports providers without local weights, precision
+or a VAE. No MiniMax integration is included yet. For development, `LUX_STATE_DIR`,
+`LUX_MODELS_DIR`, `STUDIO_OUTPUT_DIR`, `AUDIOCPP_BINARY` and `LUX_BACKEND` override
+the corresponding local paths/runtime. Changing a runtime requires a new probe.
 
 ### Studio UI
 
@@ -61,7 +96,7 @@ then opens a multitrack mixer.
 
 | Mode | Model (audio.cpp family) | Stems | License | Measured, 30 s song |
 |---|---|---|---|---|
-| Vocals & Instrumental | BS-RoFormer ep368 (`bs_roformer`) | vocals, instrumental | Apache-2.0 | 33 s |
+| Vocals & Instrumental | BS-RoFormer ep368 (`bs_roformer`) | vocals, instrumental | Publisher declares Apache-2.0; original checkpoint source undocumented | 33 s |
 | 4 stems | HTDemucs (`htdemucs`) | vocals, drums, bass, other | MIT | 3.5 s |
 | 6 stems | HTDemucs 6s (`htdemucs_6stems`) | + guitar, piano | MIT | 3.6 s |
 | Anything | SAM Audio base (`sam_audio`) | your text prompt + everything else (mono 48 kHz) | Meta SAM License | 19 s |
@@ -104,6 +139,10 @@ uv run studio-gen --lyrics-file song.txt --style "English, synthwave, male vocal
 ```
 
 ## Parameters (v0.1)
+
+The API accepts common song fields plus a `model_options` object validated by
+the selected adapter. Legacy flat YuE2 options still work. The table below applies
+to the YuE2 adapter; these options are not required by other providers.
 
 | UI / API field | YuE2 option | Default | Notes |
 |---|---|---|---|

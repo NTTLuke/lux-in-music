@@ -1,32 +1,66 @@
 #!/usr/bin/env bash
-# One-time setup: clone + build audio.cpp (Metal), download YuE2 Q8 weights, install Python deps.
+# Prepare software only. Model weights are managed by Settings.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+PROJECT_ROOT="$PWD"
+TOOLS_DIR="$PROJECT_ROOT/.tools"
+AUDIOCPP_PIN=6c3ab9ad4e599a44d287697863b4f8846ef658be
+export PATH="$TOOLS_DIR/bin:$PATH"
+mkdir -p "$TOOLS_DIR/bin"
+trap 'echo "Setup stopped. Fix the error above and run ./studio.sh again." >&2' ERR
 
-if [ ! -d vendor/audio.cpp ]; then
-  git clone --depth 1 --recurse-submodules https://github.com/0xShug0/audio.cpp vendor/audio.cpp
-fi
-if [ ! -x vendor/audio.cpp/build/macos-metal-release/bin/audiocpp_server ] || ! grep -q htdemucs vendor/audio.cpp/build/macos-metal-release/CMakeCache.txt; then
-  (cd vendor/audio.cpp && scripts/build_metal.sh --build-type Release --model-set custom --models yue2,htdemucs,htdemucs_6stems,bs_roformer,sam_audio \
-     --target audiocpp_cli --target audiocpp_server)
-fi
-
-M=models/Yue2-3B-GGUF
-B=https://huggingface.co/audio-cpp/Yue2-3B-GGUF/resolve/main
-mkdir -p "$M/sidecars"
-for f in sidecars/yue2-model-config.json sidecars/yue2-generation-config.json sidecars/yue2-qwen.tiktoken \
-         sidecars/yue2-vae-config.json yue2-vae-f16.gguf yue2-3b-q8_0.gguf; do
-  [ -s "$M/$f" ] || curl -fL -C - -o "$M/$f" "$B/$f"
+printf '\n[1/4] Checking software prerequisites…\n'
+for tool in curl git; do
+  command -v "$tool" >/dev/null || { echo "Install $tool and run ./studio.sh again." >&2; exit 1; }
 done
+if ! command -v uv >/dev/null; then
+  echo "Installing uv locally (software package manager)…"
+  curl -fL --progress-bar https://astral.sh/uv/0.10.10/install.sh -o "$TOOLS_DIR/install-uv.sh"
+  UV_INSTALL_DIR="$TOOLS_DIR/bin" UV_NO_MODIFY_PATH=1 sh "$TOOLS_DIR/install-uv.sh"
+fi
 
-uv sync
+printf '\n[2/4] Preparing Python 3.12 and application dependencies…\n'
+uv sync --frozen --python 3.12
+if [ ! -x .venv/bin/studio-gen ]; then
+  uv sync --frozen --python 3.12 --reinstall-package lux-in-music
+fi
 
-# Lux Studio separators
-S=models/sep G=https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/main
-for f in HTDemucs-GGUF/htdemucs-q8_0.gguf HTDemucs-6stems-GGUF/htdemucs-6stems-q8_0.gguf BS-RoFormer-ep368-GGUF/bs-roformer-ep368-q8_0.gguf; do
-  mkdir -p "$S/$(dirname $f)"; [ -s "$S/$f" ] || curl -fL -C - --retry 5 -o "$S/$f" "$G/$f"
-done
-mkdir -p "$S/SAM-Audio-GGUF"
-[ -s "$S/SAM-Audio-GGUF/sam-audio-base-q8_0.gguf" ] || curl -fL -C - --retry 5 -o "$S/SAM-Audio-GGUF/sam-audio-base-q8_0.gguf" \
-  https://huggingface.co/audio-cpp/SAM-Audio-GGUF/resolve/main/sam-audio-base-q8_0.gguf
-echo "Setup complete."
+printf '\n[3/4] Preparing audio.cpp (software only; no model downloads)…\n'
+export LUX_MODEL_FAMILIES
+LUX_MODEL_FAMILIES="$(.venv/bin/python -m studio.bootstrap families)"
+if [ "$(uname -s)" = Darwin ]; then
+  BUILD_DIR="$PROJECT_ROOT/vendor/audio.cpp/build/macos-metal-release"
+else
+  BUILD_DIR="$PROJECT_ROOT/vendor/audio.cpp/build/cpu-release"
+fi
+DEFAULT_BINARY="$BUILD_DIR/bin/audiocpp_server"
+ENGINE_BINARY="${AUDIOCPP_BINARY:-$DEFAULT_BINARY}"
+if [ ! -x "$ENGINE_BINARY" ] || { [ -z "${AUDIOCPP_BINARY:-}" ] && ! .venv/bin/python -m studio.bootstrap compatible "$BUILD_DIR/CMakeCache.txt"; }; then
+  if [ "$(uname -s)" = Darwin ] && ! xcode-select -p >/dev/null 2>&1; then
+    echo "Apple Command Line Tools are required. Run xcode-select --install, complete Apple's installer, then run ./studio.sh again." >&2
+    exit 1
+  fi
+  if [ ! -d vendor/audio.cpp ]; then
+    echo "Downloading the pinned audio.cpp source…"
+    git clone --no-checkout --filter=blob:none https://github.com/0xShug0/audio.cpp vendor/audio.cpp
+    git -C vendor/audio.cpp checkout --detach "$AUDIOCPP_PIN"
+  elif [ "$(git -C vendor/audio.cpp rev-parse HEAD)" != "$AUDIOCPP_PIN" ]; then
+    echo "Existing audio.cpp checkout differs from the supported revision. Set AUDIOCPP_BINARY to a compatible build or move the checkout aside before retrying." >&2
+    exit 1
+  fi
+  git -C vendor/audio.cpp submodule update --init --recursive --depth 1
+  BUILD_COMMAND=(bash scripts/build_metal.sh --build-type Release --model-set custom --models "$LUX_MODEL_FAMILIES" --target audiocpp_cli --target audiocpp_server)
+  if [ "$(uname -s)" != Darwin ]; then
+    BUILD_COMMAND=(bash "$PROJECT_ROOT/scripts/build_cpu.sh")
+  fi
+  echo "Building the runtime. Compiler output shows completed build steps…"
+  if command -v cmake >/dev/null; then
+    (cd vendor/audio.cpp && "${BUILD_COMMAND[@]}")
+  else
+    echo "Preparing CMake 3.31.6…"
+    (cd vendor/audio.cpp && uv run --project "$PROJECT_ROOT" --frozen --with cmake==3.31.6 -- "${BUILD_COMMAND[@]}")
+  fi
+else
+  echo "Compatible runtime binary found; build skipped."
+fi
+printf '\nSoftware setup complete. Model files are chosen and downloaded in Settings.\n'

@@ -6,56 +6,129 @@
       "issue": "https://github.com/NTTLuke/lux-in-music/issues/4",
       "description": "Use Lux In Music product names and consistent package metadata.",
       "status": "implemented",
-      "tests": ["tests.test_app.ProductIdentityTests"],
-      "acceptance": ["API and browser titles say Lux In Music.", "Project and editable lock package use lux-in-music.", "The generation CLI help still opens.", "Project-owned files contain no retired branding."]
+      "tests": [
+        "tests.test_app.ProductIdentityTests"
+      ],
+      "acceptance": [
+        "API and browser titles say Lux In Music.",
+        "Project and editable lock package use lux-in-music.",
+        "The generation CLI help still opens.",
+        "Project-owned files contain no retired branding."
+      ]
     },
     {
       "id": "empty-install-settings",
       "issue": "https://github.com/NTTLuke/lux-in-music/issues/2",
       "description": "Run studio with no models or engine and open Settings first.",
-      "status": "planned",
-      "tests": [],
-      "acceptance": ["A fresh install downloads no model or separation weights.", "Starting the studio serves the UI without an inference engine.", "No usable active profile opens Settings and blocks generation.", "Existing library audio remains accessible."]
+      "status": "implemented",
+      "tests": [
+        "tests.test_models.SettingsApiTests",
+        "tests.test_models.DownloadTests"
+      ],
+      "acceptance": [
+        "A fresh install downloads no model or separation weights.",
+        "Starting the studio serves the UI without an inference engine.",
+        "No usable active profile opens Settings and blocks generation.",
+        "Existing library audio remains accessible."
+      ]
+    },
+    {
+      "id": "first-run-software-bootstrap",
+      "issue": "https://github.com/NTTLuke/lux-in-music/issues/2",
+      "description": "Run studio.sh on a fresh checkout to prepare software and open the studio without weights.",
+      "status": "implemented",
+      "tests": [
+        "tests.test_setup.BootstrapTests"
+      ],
+      "acceptance": [
+        "Install missing uv locally, prepare Python and locked dependencies, and build the pinned native runtime.",
+        "Show software installation stages and native build progress before opening the UI.",
+        "Install no generation or separation model weights.",
+        "Repeat startup reuses a compatible build.",
+        "Missing system compiler prerequisites produce an actionable message."
+      ]
     },
     {
       "id": "provider-boundaries",
       "issue": "https://github.com/NTTLuke/lux-in-music/issues/2",
       "description": "Keep shared application behavior independent of a particular model.",
-      "status": "planned",
-      "tests": [],
-      "acceptance": ["YuE2-specific request mapping belongs in its adapter.", "A fake provider runs the shared queue/result flow without audio.cpp.", "The UI offers only capabilities reported by the selected model.", "Generation and separation setup are independent."]
+      "status": "implemented",
+      "tests": [
+        "tests.test_models.ProviderBoundaryTests"
+      ],
+      "acceptance": [
+        "YuE2-specific request mapping belongs in its adapter.",
+        "A fake provider runs the shared queue/result flow without audio.cpp.",
+        "The UI offers only capabilities reported by the selected model.",
+        "Generation and separation setup are independent."
+      ]
     },
     {
       "id": "license-before-download",
       "issue": "https://github.com/NTTLuke/lux-in-music/issues/3",
       "description": "Show model and component licenses before a user starts a download.",
-      "status": "planned",
-      "tests": [],
-      "acceptance": ["Settings shows identifiers, restrictions, source links, and release revisions for the model and each component.", "No download starts before the explicit user action and acknowledgement.", "Unknown licenses prevent offering the download.", "A release or license change requires renewed review."]
+      "status": "implemented",
+      "tests": [
+        "tests.test_models.DownloadTests",
+        "tests.test_catalog.CatalogTests",
+        "tests.test_models.SettingsApiTests"
+      ],
+      "acceptance": [
+        "Settings shows identifiers, restrictions, source links, and release revisions for the model and each component.",
+        "No download starts before the explicit user action and acknowledgement.",
+        "Unknown licenses prevent offering the download.",
+        "A release or license change requires renewed review."
+      ]
     },
     {
       "id": "independent-precision",
       "issue": "https://github.com/NTTLuke/lux-in-music/issues/3",
       "description": "Choose exact main-model and VAE precisions separately.",
-      "status": "planned",
-      "tests": [],
-      "acceptance": ["YuE2 main choices include Q8_0 and BF16 using real artifact filenames.", "BF16 is never mislabeled as FP16.", "Selecting YuE2 defaults the VAE choice to F16 and offers F32 without auto-downloading.", "Activation only accepts combinations verified for the selected runtime/device.", "Models without a configurable VAE do not show a VAE selector.", "Weight sizes and runtime memory estimates are displayed separately."]
+      "status": "implemented",
+      "tests": [
+        "tests.test_catalog.CatalogTests",
+        "tests.test_models.DownloadTests"
+      ],
+      "acceptance": [
+        "YuE2 main choices include Q8_0 and BF16 using real artifact filenames.",
+        "BF16 is never mislabeled as FP16.",
+        "Selecting YuE2 defaults the VAE choice to F16 and offers F32 without auto-downloading.",
+        "Activation only accepts combinations verified for the selected runtime/device.",
+        "Models without a configurable VAE do not show a VAE selector.",
+        "Weight sizes and runtime memory estimates are displayed separately."
+      ]
     },
     {
       "id": "model-download-manager",
       "issue": "https://github.com/NTTLuke/lux-in-music/issues/3",
       "description": "Download and activate complete model profiles from Settings.",
-      "status": "planned",
-      "tests": [],
-      "acceptance": ["Downloads show progress, failure, cancellation, and retry/resume when supported.", "Weights, VAE, tokenizer, and configs are verified before activation.", "Existing valid files are reused without another download.", "Activation failures preserve the last working profile.", "The selected profile persists across app restarts."]
+      "status": "implemented",
+      "tests": [
+        "tests.test_models.DownloadTests"
+      ],
+      "acceptance": [
+        "Downloads show progress, failure, cancellation, and retry/resume when supported.",
+        "Weights, VAE, tokenizer, and configs are verified before activation.",
+        "Existing valid files are reused without another download.",
+        "Activation failures preserve the last working profile.",
+        "The selected profile persists across app restarts."
+      ]
     },
     {
       "id": "profile-provenance",
       "issue": "https://github.com/NTTLuke/lux-in-music/issues/2",
       "description": "Keep each job and song tied to its effective model profile.",
-      "status": "planned",
-      "tests": [],
-      "acceptance": ["Changing Settings does not change queued or running jobs.", "Song metadata records provider, model/VAE revisions and precisions, licenses, seed, backend, and effective options without secrets.", "Old library metadata still loads.", "Editing resolves the original compatible profile or explains which component is missing."]
+      "status": "implemented",
+      "tests": [
+        "tests.test_models.ProviderBoundaryTests",
+        "tests.test_models.SettingsApiTests"
+      ],
+      "acceptance": [
+        "Changing Settings does not change queued or running jobs.",
+        "Song metadata records provider, model/VAE revisions and precisions, licenses, seed, backend, and effective options without secrets.",
+        "Old library metadata still loads.",
+        "Editing resolves the original compatible profile or explains which component is missing."
+      ]
     },
     {
       "id": "natural-song-ending",
@@ -63,7 +136,12 @@
       "description": "Guide song structure by duration and report forced truncation accurately.",
       "status": "planned",
       "tests": [],
-      "acceptance": ["Keep a maximum-duration cap distinct from a composition target.", "Retain semantic and score truncation flags.", "A complete-song result requires ending evidence and a listening check.", "Validate a reasonable 3- or 4-minute request with its profile, seed, and actual duration recorded."]
+      "acceptance": [
+        "Keep a maximum-duration cap distinct from a composition target.",
+        "Retain semantic and score truncation flags.",
+        "A complete-song result requires ending evidence and a listening check.",
+        "Validate a reasonable 3- or 4-minute request with its profile, seed, and actual duration recorded."
+      ]
     }
   ]
 }

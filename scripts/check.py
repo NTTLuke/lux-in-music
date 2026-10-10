@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EXCLUDED = {".git", ".venv", "vendor", "models", "outputs", "node_modules", "__pycache__"}
+EXCLUDED = {".git", ".venv", ".lux", ".tools", "vendor", "models", "outputs", "node_modules", "__pycache__"}
 # Character class keeps the retired name out of maintained source text.
 RETIRED_BRAND = re.compile(r"s[u]no", re.IGNORECASE)
 
@@ -159,14 +159,17 @@ def main() -> int:
         if report["application_checks"]:
             # Resolve every implemented selector before running application tests.
             loader = unittest.TestLoader()
+            selectors = []
             for item in report["requirements"]:
                 if item["status"] == "implemented":
                     suite = loader.loadTestsFromNames(item["tests"])
                     if loader.errors or not suite.countTestCases():
                         raise ValueError(f"Cannot verify requirement {item['id']}: {loader.errors}")
-                    run_tests(item["tests"])
+                    selectors.extend(item["tests"])
+            run_tests(list(dict.fromkeys([*selectors, "tests.test_app.RequestBoundaryTests"])))
+            for item in report["requirements"]:
+                if item["status"] == "implemented":
                     report["checks"].append({"name": item["id"], "passed": True})
-            run_tests(["tests.test_app.RequestBoundaryTests"])
             report["checks"].append({"name": "Offline request boundary tests", "passed": True})
             print("PASS Offline application checks", flush=True)
         for item in report["requirements"]:

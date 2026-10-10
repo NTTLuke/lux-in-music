@@ -111,7 +111,7 @@ function setupDemos() {
 
 /* ---------- state ---------- */
 
-const state = { library: [], jobs: [], current: null, adv: {}, cot: "off", variations: 1, jobsAt: 0 };
+const state = { library: [], jobs: [], current: null, adv: {}, cot: "off", variations: 1, jobsAt: 0, submitting: false };
 const audio = $("audio");
 
 /* ---------- generative covers ---------- */
@@ -326,14 +326,16 @@ function updateGoLabel() { $("go-label").textContent = state.variations > 1 ? `C
 
 async function submit(e) {
   e.preventDefault();
+  if (!Settings.ready()) { location.hash = "#/settings"; return; }
   $("form-error").textContent = "";
   const base = {
     title: $("title").value.trim() || undefined,
-    lyrics: $("lyrics").value, style: $("style").value, cot: state.cot,
-    max_duration_s: Number($("len").value), ...state.adv,
+    lyrics: $("lyrics").value, style: $("style").value,
+    max_duration_s: Settings.capability().max_duration_s ? Number($("len").value) : undefined,
+    model_options: Settings.options(),
   };
-  if ($("abc").value.trim()) base.abc = $("abc").value;
   const random = $("seed-random").checked, seed0 = Number($("seed").value);
+  state.submitting = true;
   $("go").disabled = true;
   try {
     for (let i = 0; i < state.variations; i++) {
@@ -345,11 +347,12 @@ async function submit(e) {
         break;
       }
     }
-  } finally { $("go").disabled = false; }
+  } finally { state.submitting = false; $("go").disabled = !Settings.ready(); }
   pollJobs();
 }
 
 function loadIntoForm(p) {
+  p = { ...p, ...(p.model_options || {}) };
   $("title").value = p.title || "";
   $("lyrics").value = p.lyrics || ""; updateLyricsCount();
   $("style").value = p.style || ""; syncChips();
@@ -597,8 +600,8 @@ async function health() {
   try {
     const h = await (await fetch("/api/health")).json();
     $("engine").className = `engine ${h.engine === "ok" ? "ok" : "down"}`;
-    $("engine-text").textContent = h.engine === "ok" ? `Engine ready · ${h.backend}` : "Engine offline";
-    $("engine").title = h.engine === "ok" ? "audio.cpp is running" : "Start it with ./studio.sh";
+    $("engine-text").textContent = h.engine === "ok" ? `Model ready · ${h.backend}` : "Model setup needed";
+    $("engine").title = h.engine === "ok" ? "The selected model is verified; its runtime starts when needed" : "Open Settings to choose a model";
   } catch { $("engine").className = "engine down"; $("engine-text").textContent = "Studio offline"; }
 }
 
@@ -609,3 +612,4 @@ setupDemos();
 loadLibrary();
 pollJobs();
 health(); setInterval(health, 8000);
+Settings.setup();

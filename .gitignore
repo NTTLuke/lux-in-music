@@ -5,3 +5,5 @@ vendor/
 outputs/
 .DS_Store
 *.log
+.lux/
+.tools/

@@ -1,8 +1,7 @@
 # Product and architecture contract
 
-This is the agreed direction for Lux In Music. The requirement ledger records
-which parts are implemented. Target behavior described here is not evidence
-that the current prototype already implements it.
+This is the product contract for Lux In Music. The requirement ledger records
+implementation status and executable checks. Natural song endings remain planned.
 
 ## Purpose
 
@@ -14,20 +13,24 @@ it is not assumed to run through audio.cpp or to expose local weights or a VAE.
 
 ## Current implementation
 
-The Python API and browser app use one audio.cpp server. `studio/params.py`
-contains YuE2-specific parameters. `studio/edit.py` assumes YuE2 semantic tokens
-at 25 frames/second and 48 kHz audio. Separation also calls audio.cpp directly.
-The launch scripts require the engine, and `scripts/setup.sh` downloads fixed
-generation and separation models. There is no Settings/model manager yet.
+Shared song inputs, queue, results and library use provider/profile contracts.
+`studio/adapters/yue2.py` owns YuE2 options, token rates and capability declarations;
+`yue2_edit.py` owns its semantic editing format. Shared audio helpers read actual
+WAV rates. `studio/providers.py` owns audio.cpp transport, process lifecycle and
+runtime probes. Generation and separation have separate lazy runtime slots.
 
-The present profile is YuE2-3B Q8_0 with an F16 VAE. The fixed server config is
-`config/audiocpp-server.json`. These are migration facts, not permanent defaults.
+Settings uses the pinned catalog and `studio/models.py` to verify/download files,
+record license reviews, and activate tested profiles. The UI starts without an
+engine. `studio.sh` prepares software, without weights, before serving the UI.
+There is no active model on a fresh install. The previous Q8_0/F16 files are
+detected as migration candidates, but require license review and verification.
 
-## Target startup and Settings flow
+## Startup and Settings flow
 
 ```mermaid
 flowchart TD
-    A[Run studio] --> B[Start UI and inspect model setup]
+    A[Run studio.sh] --> S[Prepare software without weights]
+    S --> B[Start UI and inspect model setup]
     B --> C{Usable active model?}
     C -->|No| D[Open Settings]
     D --> E[Choose provider and model]
@@ -35,10 +38,10 @@ flowchart TD
     F --> G[Show component licenses and download sizes]
     G --> H[User starts download]
     H --> I[Verify all required files]
-    I --> J[Activate model profile]
-    J --> K[Start or connect to runtime]
-    C -->|Yes| K
-    K --> L[Studio with supported model features]
+    I --> K[Test selected runtime and precision]
+    K --> J[Save and activate profile]
+    J --> L[Studio with supported model features]
+    C -->|Yes| L
 ```
 
 1. Installing Lux installs software dependencies, without selecting/downloading
@@ -57,7 +60,7 @@ flowchart TD
 6. The UI exposes the active model's capabilities. Planning, ABC input, semantic
    editing, VAE selection, and local precision controls are conditional features.
 
-## Target boundaries
+## Boundaries
 
 | Boundary | Responsibilities |
 | --- | --- |
@@ -68,9 +71,34 @@ flowchart TD
 | Download manager | User-requested transfer, progress, cancellation/resume, integrity verification |
 | Model profile store | Selected provider/model/VAE, precisions, paths, readiness and effective configuration |
 
-Start by extracting the existing audio.cpp/YuE2 behavior, not by writing a new
-inference framework. Validate shared code using a small fake provider. Local
-generation and separation services must be configurable independently.
+The shared contract is validated using a small fake provider with no YuE2 options.
+An external delivery profile has no local paths, weights, precision or VAE. Its
+provider probe confirms readiness. This is an extension point; it does not
+implement a third-party service, credentials UI, billing or MiniMax support.
+
+## Storage and activation decisions
+
+- Catalog file URLs, sizes and integrity hashes are tied to immutable releases.
+  LFS artifacts use SHA-256; small Git sidecars use Git blob SHA-1.
+- Settings records acknowledgement of the exact license/release digest before
+  any transfer. A changed release or license document invalidates that review.
+- Each release has its own directory. Legacy files are hashed before hardlinking
+  or copying into that directory. Replacements are verified before atomic rename;
+  old songs' release files are not overwritten by a newer release.
+- Partial downloads stay resumable. Invalid ranges and corrupt completed files
+  fail setup. Cancellation cannot interrupt an already running native inference;
+  it can cancel its wait and prevent activation when the inference finishes.
+- Activation requires complete verified files and a valid nonempty WAV from a
+  short native probe. Save failure rolls back the in-memory active selection.
+  Device/backend or binary fingerprint changes invalidate local readiness.
+- A source pin describes the supported native build. External binaries record
+  their path and compatibility fingerprint, without claiming a known source revision.
+- Provider locks protect a runtime during inference. Queued jobs keep a profile
+  snapshot; the runtime switches to that profile when the job runs. No arbitrary
+  existing processes are terminated. Only the studio's subprocesses are owned.
+- The catalog reports a BS-RoFormer publisher license declaration with its
+  original checkpoint provenance caveat. Keep that caveat visible; do not describe
+  the declaration as proof of the original checkpoint's licensing history.
 
 ## Precision and VAE choices
 
@@ -95,8 +123,8 @@ and temporary allocations add overhead. Distinguish GB from GiB and show measure
 runtime memory separately when available. Precision is a resource/fidelity choice,
 not a guaranteed audible improvement or a fix for song endings.
 
-Source: [YuE2 GGUF release](https://huggingface.co/audio-cpp/Yue2-3B-GGUF).
-The current model card declares CC BY-NC 4.0. Confirm the model and VAE licenses
+Source: [pinned YuE2 GGUF release](https://huggingface.co/audio-cpp/Yue2-3B-GGUF/blob/cca74d8980c00f30ab8d52248a367c01ad633ec2/README.md).
+The model card declares CC BY-NC 4.0. Confirm the model and VAE licenses
 for the exact releases used; do not infer every component's license from the
 application license or another component. The [license deed](https://creativecommons.org/licenses/by-nc/4.0/)
 describes attribution and noncommercial requirements and links the full terms.
@@ -113,10 +141,10 @@ YuE2's semantic cap currently sets maximum length, not a composition target.
 Completion needs the ending/truncation signals plus listening, not just a valid
 WAV. Model adapters must express duration support accurately.
 
-## Delivery order and evidence
+## Delivery and evidence
 
 - #4: product/package naming and the shared contributor harness.
-- #2: provider boundaries, UI-first startup, profiles and capabilities.
+- #2: provider boundaries, software bootstrap, UI-first startup, profiles and capabilities.
 - #3: Settings, license display, downloads and independent precision choices.
 - #1: duration-aware composition and natural song endings.
 
