@@ -99,6 +99,35 @@ def main():
                     expect(page.locator("#go")).to_be_enabled()
                     expect(page.locator("#cot")).to_be_hidden()  # the fake provider offers no planning
                     expect(page.locator("#abc")).to_be_hidden()
+                    expect(page.locator("#demo-row [data-demo='lux-tenebris']")).to_have_count(1)
+                    expect(page.locator(".template-btn")).to_have_count(5)
+                    page.locator("#genre-templates summary").click()
+                    page.locator("#title").fill("My working title")
+                    page.locator("#lyrics").fill("[Verse]\nKeep my own words\n[Outro]\nWe are home")
+                    before_template = page.evaluate("({title: $('title').value, lyrics: $('lyrics').value, length: $('len').value, seed: $('seed').value, cot: state.cot})")
+                    generation_posts = []
+                    page.on("request", lambda request: generation_posts.append(request.url) if request.method == "POST" and request.url.endswith("/api/generate") else None)
+                    for template in ["progressive-metal", "indie-pop", "cinematic-synthwave", "soul-rnb", "jazz-fusion"]:
+                        page.locator(f"[data-template='{template}']").click()
+                        expect(page.locator(f"[data-template='{template}']")).to_have_attribute("aria-pressed", "true")
+                        assert page.evaluate("({title: $('title').value, lyrics: $('lyrics').value, length: $('len').value, seed: $('seed').value, cot: state.cot})") == before_template
+                    assert not generation_posts, generation_posts
+                    page.locator("[data-template='progressive-metal']").click()
+                    assert "progressive metal" in page.locator("#style").input_value()
+                    expect(page.locator("#template-status")).to_contain_text("Progressive Metal style applied")
+                    page.locator("#style").fill("My custom sound")
+                    expect(page.locator("[data-template='progressive-metal']")).to_have_attribute("aria-pressed", "false")
+                    page.locator("[data-template='progressive-metal']").click()
+                    assert page.locator(".create").bounding_box()["width"] == 520
+                    page.locator(".create").evaluate("panel => panel.scrollTop = 0")
+                    page.screenshot(path=str(args.artifacts / "templates-desktop.png"))
+                    for width in [1280, 1024, 900, 390]:
+                        page.set_viewport_size({"width": width, "height": 844})
+                        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), f"Overflow at {width}px"
+                    page.locator("#genre-templates").scroll_into_view_if_needed()
+                    expect(page.locator("[data-template='progressive-metal']")).to_be_visible()
+                    page.screenshot(path=str(args.artifacts / "templates-mobile.png"))
+                    page.set_viewport_size({"width": 1440, "height": 1000})
                     page.locator("#go").click()
                     expect(page.locator(".song")).to_have_count(2, timeout=15000)
                     def stem_set(route):
@@ -170,7 +199,7 @@ def main():
                     browser.close()
                 print(json.dumps({"settings_first": True, "license_gate": True, "independent_precision": True,
                                   "fake_download_and_activation": True, "capability_controls": True,
-                                  "generation_and_library": True, "duration_target_and_cap": True, "lyric_advice_and_truncation_badge": True, "mobile_navigation": True, "external_without_weights": True, "verification_survives_reload_and_dropdown": True, "separator_disabled_when_active": True, "card_progress_and_errors_only": True, "creator_terms_visible": True, "mixer_editable_and_legacy_songs": True, "unresolved_license_blocked": True, "javascript_errors": errors}))
+                                  "generation_and_library": True, "five_style_templates_without_generation": True, "templates_preserve_song_inputs": True, "wider_create_and_responsive_layout": True, "duration_target_and_cap": True, "lyric_advice_and_truncation_badge": True, "mobile_navigation": True, "external_without_weights": True, "verification_survives_reload_and_dropdown": True, "separator_disabled_when_active": True, "card_progress_and_errors_only": True, "creator_terms_visible": True, "mixer_editable_and_legacy_songs": True, "unresolved_license_blocked": True, "javascript_errors": errors}))
             finally:
                 server.terminate()
                 try: server.wait(timeout=10)

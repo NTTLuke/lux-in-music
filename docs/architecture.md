@@ -20,6 +20,9 @@ Shared song inputs, queue, results and library use provider/profile contracts.
 WAV rates. `studio/providers.py` owns audio.cpp transport, process lifecycle and
 runtime probes. Generation and separation have separate lazy runtime slots.
 
+Genre templates belong to the shared Create UI: they modify only the common
+style field, preserve song inputs/settings, and make no inference request.
+
 Settings uses the pinned catalog and `studio/models.py` to verify/download files,
 record license reviews, and activate tested profiles. The UI starts without an
 engine. `studio.sh` prepares software, without weights, before serving the UI.
