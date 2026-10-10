@@ -15,8 +15,23 @@ Press Play and enable sound to hear the original ending.
 
 https://github.com/user-attachments/assets/51a82812-f433-4d41-804c-e34d2c7c23a7
 
-[Install on a Mac](#install-on-a-mac) · [Open it again](#open-it-again-and-stop-it) ·
-[Get help](#if-something-goes-wrong) · [Technical reference](#technical-reference)
+[Download](#releases-and-changelog) · [Install on a Mac](#install-on-a-mac) ·
+[Open it again](#open-it-again-and-stop-it) · [Get help](#if-something-goes-wrong) ·
+[Technical reference](#technical-reference)
+
+## Releases and changelog
+
+Lux In Music is published as numbered [releases](https://github.com/NTTLuke/lux-in-music/releases).
+Download the ZIP of the latest release, extract it, and continue with the
+installation steps below: installing and launching are the same.
+
+Every release lists what changed, in new features and fixes, on its release page
+and in [CHANGELOG.md](CHANGELOG.md). Use the ZIP from a release when you want a
+known version instead of the newest source.
+
+<!-- release:start -->
+Release details are written here by `./release.sh`.
+<!-- release:end -->
 
 ## Install on a Mac
 
@@ -51,13 +66,18 @@ are already installed, continue to step 2.
 
 ### 2. Download Lux In Music
 
-1. Open [Lux In Music on GitHub](https://github.com/NTTLuke/lux-in-music).
-2. Click the green **Code** button, then **Download ZIP**.
+1. Open [the latest release](https://github.com/NTTLuke/lux-in-music/releases/latest).
+2. Under **Assets**, download `lux-in-music-v….zip`, which contains the complete
+   app source for that version.
 3. In Finder, open **Downloads** and double-click the ZIP to extract it, if it
    has not been extracted already.
 4. Move the extracted project folder to a permanent location you can find again,
    such as **Documents**. It contains a file called **studio.sh**. Use this same
    folder for future launches.
+
+For an earlier version, open [all releases](https://github.com/NTTLuke/lux-in-music/releases)
+and download its ZIP the same way. The green **Code** → **Download ZIP** button
+gives the newest source instead, without a version number.
 
 ### 3. Start Lux and let it install the software
 
@@ -200,6 +220,12 @@ see [the license review and official links](docs/model-licenses.md).
 Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Any coding
 CLI can use the shared instructions and run `python3 scripts/check.py`. See
 [the harness guide](docs/harness.md) for application checks and CLI compatibility.
+
+Releases are built from `main` with `./release.sh patch` — or `minor`, `major`, an
+explicit version such as `0.2.0`, and `--dry-run` to preview. In one run it checks
+the repository, writes the version, `CHANGELOG.md` and the README release block,
+then tags, builds and publishes the downloadable files. Add `--full-checks` to
+also run the application tests before publishing.
 
 The [architecture contract](docs/architecture.md) explains provider/model adapters,
 Settings, independent precision choices, and profile records. Track acceptance

@@ -28,6 +28,9 @@ tool does not load it automatically, read it explicitly before working.
 - Lock consistency: `uv lock --check --offline` with an accessible uv cache.
 - Current app launcher: `./studio.sh`; individual UI: `scripts/run_studio.sh`.
 - Current generation CLI: `uv run studio-gen --help`.
+- Release: `./release.sh patch|minor|major|<x.y.z>` from `main`, with `--dry-run`
+  to preview. It writes the version, `CHANGELOG.md` and the README release block,
+  then tags, builds and publishes the artifacts. See CONTRIBUTING.md.
 
 The automated checks never download models, call a real inference engine, or require a GPU.
 Actual audio changes also need a recorded audio test and listening check.
