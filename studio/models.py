@@ -129,7 +129,10 @@ class ModelManager:
         with self.lock:
             active = self.state["profiles"].get(self.state.get("active"))
             ready = self.ready(active)
-            return {"active": copy.deepcopy(active) if ready else None, "setup_required": not ready,
+            current = copy.deepcopy(active) if ready else None
+            if current:
+                current["capabilities"] = copy.deepcopy(get_provider(current).adapter(current).capabilities)
+            return {"active": current, "setup_required": not ready,
                     "state_error": self.state_error, "separators": copy.deepcopy(self.state["separators"]),
                     "accepted_license_reviews": list(self.state.get("license_reviews", {})),
                     "profiles": [{"id": p["id"], "capabilities": p.get("capabilities", {}), "ready": self.ready(p)} for p in self.state["profiles"].values()],
@@ -158,7 +161,10 @@ class ModelManager:
             profile = profile or self.state["profiles"].get(self.state.get("active"))
             if not self.ready(profile):
                 raise SetupRequired("Choose, verify, and activate a model in Settings first.")
-            return copy.deepcopy(profile)
+            current = copy.deepcopy(profile)
+            if current["task"] == "gen":
+                current["capabilities"] = copy.deepcopy(get_provider(current).adapter(current).capabilities)
+            return current
 
     def separator(self, mode):
         profile = self.state["profiles"].get(self.state["separators"].get(mode))

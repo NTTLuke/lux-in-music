@@ -33,7 +33,7 @@ const DEMOS = [
   {
     id: "lux-tenebris",
     label: "Demo · Melodic Techno",
-    hint: "3 min cinematic melodic techno: dark synths, arpeggios, ethereal vocal, festival drops",
+    hint: "4 min cinematic melodic techno: dark synths, arpeggios, ethereal vocal, festival drops",
     params: {
       title: "Lux In Tenebris",
       lyrics: `[Intro]
@@ -89,7 +89,7 @@ Can you feel it in the dark
 We are the light in the dark`,
       style: "English, melodic techno, dark progressive house, cinematic, 124 BPM, four-on-the-floor kick, pulsing rolling bassline, hypnotic synth arpeggios, huge analog lead, epic supersaw chords, atmospheric pads, ethereal female vocal, airy reverb, emotional build-up, massive festival drop, wide stereo, polished club master",
       cot: "full",
-      max_duration_s: 180,
+      target_duration_s: 240,
     },
   },
 ];
@@ -272,10 +272,15 @@ function setupForm() {
   $("style-clear").onclick = () => { $("style").value = "English, "; syncChips(); $("style").focus(); };
 
   const len = $("len");
-  len.oninput = () => { $("len-val").textContent = fmt(len.value); paintRange(len); };
+  len.oninput = () => { $("len-val").textContent = fmt(len.value); paintRange(len); updateLyricsCount(); };
   len.oninput();
+  $("duration-mode").onchange = updateDurationUI;
 
-  segmented("cot", (v) => (state.cot = v));
+  segmented("cot", (v) => {
+    state.cot = v;
+    if (v === "off") $("duration-mode").value = "cap";
+    updateDurationUI();
+  });
   segmented("variations", (v) => { state.variations = Number(v); updateGoLabel(); });
 
   $("seed-random").onchange = () => { $("seed").disabled = $("seed-random").checked; };
@@ -306,6 +311,21 @@ function paintRange(el) { el.style.setProperty("--p", `${((el.value - el.min) / 
 function updateLyricsCount() {
   const v = $("lyrics").value, lines = v.split("\n").filter((l) => l.trim() && !/^\[.*\]$/.test(l.trim())).length;
   $("lyrics-count").textContent = `${lines} lines · ${v.length} chars`;
+  const words = v.replace(/^\[.*\]$/gm, "").trim().split(/\s+/).filter(Boolean).length;
+  const target = Settings.capability().target_duration_s && $("duration-mode").value === "target";
+  $("lyrics-advice").textContent = target ? `${words} words. The score will be checked before audio generation. ${words / Number($("len").value) > 2.5 ? "Dense lyrics: consider fewer repeated choruses or a longer duration. " : ""}${/\[outro\]/i.test(v) ? "" : "Add [Outro] and a final lyric phrase to describe the ending."}` : "";
+}
+function updateDurationUI() {
+  const cap = Settings.capability(), supported = Boolean(cap.target_duration_s);
+  const target = supported && $("duration-mode").value === "target";
+  $("duration-mode").hidden = $("duration-mode-label").hidden = !supported;
+  $("len-label").textContent = target ? "Song duration (approximate)" : "Maximum length";
+  $("len").min = target ? cap.min_target_duration_s || 30 : 10;
+  $("len").max = target ? cap.target_duration_s : cap.max_duration_s || 360;
+  $("len").value = Math.max(Number($("len").min), Math.min(Number($("len").value), Number($("len").max)));
+  if (target && state.cot === "off" && cap.planning?.includes("full")) { state.cot = "full"; setSegmented("cot", "full"); }
+  $("duration-hint").textContent = target ? "Plan the whole song first. Instrumental passages may be shortened; vocal passages, tempo and final bars are kept. A small extra allowance lets the model finish. Supplied scores are kept intact." : "Hard upper bound. This can cut a song mid-phrase; it does not plan an ending.";
+  $("len").oninput();
 }
 function styleTags() { return $("style").value.split(",").map((t) => t.trim()).filter(Boolean); }
 function toggleStyleTag(tag) {
@@ -331,7 +351,8 @@ async function submit(e) {
   const base = {
     title: $("title").value.trim() || undefined,
     lyrics: $("lyrics").value, style: $("style").value,
-    max_duration_s: Settings.capability().max_duration_s ? Number($("len").value) : undefined,
+    target_duration_s: Settings.capability().target_duration_s && $("duration-mode").value === "target" ? Number($("len").value) : undefined,
+    max_duration_s: Settings.capability().max_duration_s && !(Settings.capability().target_duration_s && $("duration-mode").value === "target") ? Number($("len").value) : undefined,
     model_options: Settings.options(),
   };
   const random = $("seed-random").checked, seed0 = Number($("seed").value);
@@ -357,7 +378,8 @@ function loadIntoForm(p) {
   $("lyrics").value = p.lyrics || ""; updateLyricsCount();
   $("style").value = p.style || ""; syncChips();
   state.cot = p.cot || "off"; setSegmented("cot", state.cot);
-  $("len").value = p.max_duration_s || Math.round((p.semantic_max_tokens || 1500) / 25); $("len").oninput();
+  $("duration-mode").value = p.target_duration_s ? "target" : "cap";
+  $("len").value = p.target_duration_s || p.max_duration_s || Math.round((p.semantic_max_tokens || 1500) / 25); updateDurationUI();
   $("seed-random").checked = false; $("seed").disabled = false; $("seed").value = p.seed ?? 1234;
   resetAdvanced();
   for (const s of SLIDERS) if (p[s.id] != null) { const el = $(s.id); el.value = p[s.id]; el.oninput(); }
@@ -370,6 +392,10 @@ function loadIntoForm(p) {
 
 function tagsHtml(style) { return style.split(",").map((t) => t.trim()).filter(Boolean).map((t) => `<span>${esc(t)}</span>`).join(""); }
 function cotBadge(cot) { return cot === "off" ? "" : `<span class="badge grad">${cot === "full" ? "score" : "melody"}</span>`; }
+function endingBadge(song) {
+  const status = song.generation?.status || (String(song.artifact_meta?.semantic?.truncated) === "true" ? "truncated" : "unknown");
+  return status === "truncated" ? '<span class="badge">Unfinished · limit reached</span>' : status === "model_end" ? '<span class="badge">Model ended</span>' : "";
+}
 
 function render() {
   const q = $("search").value.trim().toLowerCase();
@@ -399,14 +425,14 @@ function render() {
         <div class="cover">${running ? '<div class="eq"><i></i><i></i><i></i><i></i></div>' : ""}</div>
         <div class="s-main"><div class="s-title">${title}${cotBadge(j.params.cot)}</div>
           <div class="s-tags">${tagsHtml(j.params.style)}</div>
-          <div class="s-sub ${running ? "shimmer" : ""}" data-elapsed>${running ? "Generating…" : "Waiting in queue"}</div>
+          <div class="s-sub ${running ? "shimmer" : ""}" data-elapsed>${running ? esc(j.stage || "Generating…") : "Waiting in queue"}</div>
           <div class="progress"><i data-bar style="width:0"></i></div></div>
       </div>`;
   }).join("");
   const songRows = songs.map((s) => `
     <div class="song ${state.current?.name === s.name ? "playing" : ""}" data-name="${esc(s.name)}">
       <div class="cover"><img src="${cover(s.name, 128)}" alt=""><div class="ov"><svg viewBox="0 0 24 24">${state.current?.name === s.name && !audio.paused ? ICON.pause : ICON.play}</svg></div><span class="dur">${fmt(s.duration_s)}</span></div>
-      <div class="s-main"><div class="s-title">${esc(s.title)}${cotBadge(s.params.cot)}${s.edit ? `<span class="badge">edit ${fmt(s.edit.start_s)}–${fmt(s.edit.end_s)}</span>` : ""}</div>
+      <div class="s-main"><div class="s-title">${esc(s.title)}${cotBadge(s.params.cot)}${endingBadge(s)}${s.edit ? `<span class="badge">edit ${fmt(s.edit.start_s)}–${fmt(s.edit.end_s)}</span>` : ""}</div>
         <div class="s-tags">${tagsHtml(s.params.style)}</div>
         <div class="s-sub">seed ${s.params.seed} · made in ${fmt(s.elapsed_s)} · ${esc((s.created || "").replace("T", " ").slice(0, 16))}</div></div>
       <canvas class="mini-wave"></canvas>
@@ -471,7 +497,7 @@ function tickJobs() {
     const elapsed = j.now - j.started + (Date.now() - state.jobsAt) / 1000;
     const pct = Math.min(0.96, elapsed / j.eta_s);
     row.querySelector("[data-bar]").style.width = `${pct * 100}%`;
-    row.querySelector("[data-elapsed]").textContent = `Generating… ${fmt(elapsed)} / ~${fmt(j.eta_s)}`;
+    row.querySelector("[data-elapsed]").textContent = `${j.stage || "Generating…"} ${fmt(elapsed)} / ~${fmt(j.eta_s)}`;
   }
 }
 setInterval(tickJobs, 250);
@@ -563,13 +589,14 @@ async function openDrawer(s) {
   if (s.artifacts?.score) {
     try { abc = await (await fetch(`/outputs/${encodeURIComponent(s.artifacts.score)}`)).text(); } catch { abc = ""; }
   }
-  const kv = [["Length", fmt(s.duration_s)], ["Planning", p.cot], ["Seed", p.seed], ["Made in", fmt(s.elapsed_s)],
+  const kv = [["Length", fmt(s.duration_s)], ["Target", p.target_duration_s ? fmt(p.target_duration_s) : "—"], ["Hard limit", p.max_duration_s ? fmt(p.max_duration_s) : "—"], ["Planning", p.cot], ["Seed", p.seed], ["Made in", fmt(s.elapsed_s)],
     ["Sample rate", `${s.sample_rate / 1000} kHz · ${s.channels === 2 ? "stereo" : "mono"}`], ["Created", (s.created || "").replace("T", " ").slice(0, 16)],
     ...SLIDERS.filter((x) => p[x.id] != null).map((x) => [x.label, p[x.id]])];
   $("drawer").innerHTML = `
     <div class="d-hero"><img src="${cover(s.name, 512)}" alt=""><button class="icon-btn d-close" data-act="close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div class="d-body">
       <div><h2 class="d-title">${esc(s.title)}</h2><div class="d-style">${esc(p.style)}</div></div>
+      ${s.generation?.message ? `<p class="hint">${esc(s.generation.message)}</p>` : endingBadge(s)}
       <div class="d-actions">
         <button class="btn primary" data-act="dplay"><svg viewBox="0 0 24 24">${ICON.play}</svg>Play</button>
         <button class="btn lux-cta" data-act="dlux"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Open in Studio Mode</button>

@@ -20,7 +20,8 @@ CLI can use the shared instructions and run `python3 scripts/check.py`. See
 The [architecture contract](docs/architecture.md) explains provider/model adapters,
 Settings, independent precision choices, and profile records. Track acceptance
 scenarios in [harness/requirements.json](harness/requirements.json). Natural song
-endings remain a separate open task (#1); a duration cap can still cut off a song.
+ending work (#1) now plans and checks EOS near the target before rendering; its
+listening acceptance remains open. Clip mode can still cut off a song.
 
 ## Architecture
 
@@ -148,7 +149,7 @@ Fonts stay Inter.
 CLI:
 
 ```bash
-uv run studio-gen --lyrics-file song.txt --style "English, synthwave, male vocal" --seed 42 --max-duration 90
+uv run studio-gen --lyrics-file song.txt --style "English, synthwave, male vocal" --seed 42 --target-duration 240
 ```
 
 ## Parameters (v0.1)
@@ -164,10 +165,17 @@ to the YuE2 adapter; these options are not required by other providers.
 | cot | `cot` | `off` here (engine default is `full`) | `off` direct; `melody` / `full` plan an ABC score first |
 | seed | `seed` | 1234 | same params + seed gives the same song |
 | max_duration_s | `semantic_max_tokens` = s × 25 | ≈ 360 s | upper bound. The model may stop earlier |
+| target_duration_s | staged adapter planning | none in CLI; 180 s in UI | complete arrangement target, 30–330 s; separate finishing allowance and EOS check |
 | num_inference_steps | `num_inference_steps` | 8 | NAR ODE steps |
 | guidance_scale | `guidance_scale` | 1.01 (off) / 1.0 | |
 | temperature / top-p / top-k / rep. penalty | `semantic_*` | 1.0 / 0.95 / 100 / 1.2 | |
 | abc | `abc` | (none) | condition on your own ABC score (needs cot=melody/full) |
+
+Use **Complete arrangement** to plan the full composition before rendering.
+**Clip / hard limit** (CLI `--max-duration`) can deliberately cut a song mid-phrase.
+The demo now targets four minutes; overlong vocal material is rejected with
+shortening/length advice. See [duration and ending behavior](docs/song-endings.md)
+for retries, retained artifacts, model limits and listening acceptance.
 
 ## Measured on M4 Max (Q8 + F16 VAE, Metal)
 

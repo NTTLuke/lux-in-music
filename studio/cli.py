@@ -23,6 +23,7 @@ def main() -> None:
     ap.add_argument("--steps", type=int, dest="num_inference_steps")
     ap.add_argument("--guidance", type=float, dest="guidance_scale")
     ap.add_argument("--max-duration", type=float, dest="max_duration_s", help="max length in seconds")
+    ap.add_argument("--target-duration", type=float, dest="target_duration_s", help="complete arrangement target in seconds; supported models plan before rendering")
     ap.add_argument("--abc-file", type=Path)
     ap.add_argument("--model-options", type=json.loads, default={}, help="JSON object with options for the selected model")
     ap.add_argument("--name", help="output file stem (default: timestamp-seed)")
@@ -40,7 +41,7 @@ def main() -> None:
                 ap.error(f"Conflicting model option: {key}")
             options[key] = value
     params = GenerationParams(lyrics=lyrics, style=a.style, seed=a.seed,
-                              max_duration_s=a.max_duration_s, model_options=options)
+                              max_duration_s=a.max_duration_s, target_duration_s=a.target_duration_s, model_options=options)
     try:
         if engine.health().get("setup_required"):
             sys.exit("Choose and activate a model first: run ./studio.sh and open Settings.")

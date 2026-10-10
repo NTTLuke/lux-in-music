@@ -72,6 +72,7 @@ label, .label-row label { font-size: 12px; font-weight: 600; color: var(--muted)
 .meta { font-size: 11.5px; color: var(--dim); font-weight: 400; text-transform: none; letter-spacing: 0; }
 .value { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .hint { font-size: 11.5px; color: var(--dim); }
+#duration-mode { width: 100%; padding: 9px 12px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel-solid); color: var(--text); font: inherit; }
 input, textarea { width: 100%; background: rgba(0,0,0,.35); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 10px 12px; font: inherit; outline: none; transition: border-color .15s, box-shadow .15s; }
 input:focus, textarea:focus { border-color: rgba(240,162,60,.6); box-shadow: 0 0 0 3px rgba(240,162,60,.18); }
 textarea { resize: vertical; line-height: 1.55; }

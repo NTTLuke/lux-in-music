@@ -68,7 +68,7 @@ def _estimate(job: dict) -> float:
         span = params["end_s"] - params["start_s"]
         sep = _sep_speed.get(params.get("mode", "4stems"), 0.5) * (span + 6)
         return 6 + 0.25 * dur + 0.3 * span + sep
-    target = params.get("max_duration_s") or 60
+    target = params.get("target_duration_s") or params.get("max_duration_s") or 60
     return _speed["overhead"] + _speed["ratio"] * target
 
 
@@ -94,7 +94,8 @@ def _worker() -> None:
                 job.update(status="done", result=res)
                 _sep_speed[p["mode"]] = res["elapsed_s"] / max(1.0, _song_duration(p["song"]))
                 continue
-            res = engine.generate(GenerationParams(**job["params"]), profile=job["profile"])
+            res = engine.generate(GenerationParams(**job["params"]), profile=job["profile"],
+                                  progress=lambda stage: job.update(stage=stage))
             job.update(status="done", result=json.loads(res.meta_path.read_text()))
             if res.duration_s > 5:
                 r = max(0.1, (res.elapsed_s - _speed["overhead"]) / res.duration_s)

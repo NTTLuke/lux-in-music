@@ -1,5 +1,59 @@
 # Project handoff
 
+## Current work: duration-aware song endings (#1)
+
+Branch: `fix/duration-aware-song-endings`, based on merged PR #6.
+The technical flow is implemented and verified; listening acceptance remains
+open, so the requirement ledger remains planned and the PR should stay draft.
+See [song endings](song-endings.md) for the upstream analysis and exact policy.
+
+- Root cause confirmed in three saved songs: plans of 318.72/336.39/286.45 seconds
+  were stopped at semantic caps of 180/180/120 seconds. No composition time budget
+  reached the old planner. An outro lyric tag alone did not fix that mismatch.
+- Complete arrangement now uses a separate target, score-only inspection,
+  conservative instrumental shortening, native groups of up to four measures,
+  bounded planning and semantic retries, and EOS/duration checks before rendering.
+  Vocal bars, breathing rests, tempo and ending bars are retained. Supplied scores
+  stay intact. Clip mode retains the hard cap and explicitly labels truncation.
+- The UI has target/cap modes, lyric word/ending advice, named job stages and
+  ending badges/details. Existing verified profiles receive these capabilities
+  without a new probe/download. Original and adapted plans, token attempts,
+  composing-stage EOS and forced-render metadata are stored separately. Token
+  recovery uses the actual adapted score and recorded semantic retry seed.
+- `.venv/bin/python scripts/check.py --full`: passed, 67 tests (five harness and
+  62 application tests). Sixteen new checks cover duration, integrity, stages,
+  retry bounds, storage, legacy profiles and semantic recovery. Planned-work
+  checks now run in the full harness without changing their acceptance status.
+- Isolated Chrome flow passed: target/cap controls, Full score selection,
+  dense-text/outro guidance, submitted target without cap, unfinished badges,
+  plus the previous Settings, library and mixer flows. No JavaScript errors.
+  Final screenshot was inspected at `/private/tmp/lux-ending-ui-final/duration-desktop.png`.
+- Real Metal semantic trials with existing Q8_0/F16 weights and a 240-second
+  adapted score emitted EOS at 237.52 and 237.92 seconds, seeds 454234436/437.
+  The earlier one-bar rewrite hit 270 seconds; keeping native groups succeeded.
+  Textual duration instructions alone produced overlong/malformed exploratory
+  plans, so the implementation checks actual notation instead of relying on them.
+- **Full application generation passed:** target 240 seconds, hard limit 270,
+  seed 454234436, generated plan 318.72 seconds at 125 BPM, adapted plan 240 seconds
+  (41 instrumental bars removed), one successful semantic attempt, EOS after
+  5,938 frames, actual WAV 237.5187 seconds, 48 kHz stereo, total wall time 264 s.
+  Profile `yue2-3b--q8_0--f16`, weights release `cca74d8980c00f30ab8d52248a367c01ad633ec2`,
+  audio.cpp revision `6c3ab9ad4e599a44d287697863b4f8846ef658be`. No new weights or
+  active Settings changes. The test runtime was closed after the run.
+- Durable local evidence: `outputs/checks/endings/20261010-target-240/` contains
+  `target-240.wav`, metadata, source/adapted scores and semantic tokens. WAV SHA-256:
+  `089918fc008347c1fbad47ede6260c797588ad8daf9c47f780a905a8308a8446`.
+  The last seconds decay from roughly -14 to -61 dBFS; this signal measurement
+  supports a quiet tail but does not prove a satisfactory musical ending.
+- **Remaining acceptance:** listen to the final chorus/outro and shortened
+  instrumental transitions; check missing/repeated lyrics and resolution. The
+  session's audio input interface is unavailable, so no listening result is
+  claimed and `listening_verified` stays false. #1 remains open pending that
+  recorded check. Other styles, languages, seeds and BF16/F32 are not covered by
+  this single audio example; failures are bounded and explained, not hidden.
+
+The sections below describe the earlier delivered PR #5/#6 work and its evidence.
+
 ## Delivered scope
 
 Implementation branches: `feat/model-settings-harness` and

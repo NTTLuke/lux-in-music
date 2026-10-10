@@ -49,6 +49,7 @@ bootstrap scripts with fake installers, empty-install API/library behavior,
 license gates, precision manifests, download integrity/resume/cancellation,
 profile persistence, runtime compatibility and provider-independent generation.
 Runtime calls are faked. An unavailable dependency fails the check.
+Available tests for planned work also run, without promoting its status.
 
 The separate browser check needs Playwright and an installed Chrome:
 
