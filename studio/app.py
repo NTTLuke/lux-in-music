@@ -22,7 +22,7 @@ from .params import GenerationParams
 
 STATIC = Path(__file__).parent / "static"
 
-app = FastAPI(title="Suno Studio Killer")
+app = FastAPI(title="Lux In Music")
 
 
 @app.middleware("http")

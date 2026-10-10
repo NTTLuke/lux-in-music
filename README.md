@@ -1,10 +1,23 @@
 # Lux In Music: local POC
 
-Local text-to-music in the style of Suno, built on
-[YuE2-3B GGUF](https://huggingface.co/audio-cpp/Yue2-3B-GGUF) running in
+Local generative music software using models compatible with audio.cpp. The current prototype uses
+[YuE2-3B GGUF](https://huggingface.co/audio-cpp/Yue2-3B-GGUF) through
 [audio.cpp](https://github.com/0xShug0/audio.cpp) (Metal on Apple Silicon).
 
 > Model license: **CC BY-NC 4.0**, so non-commercial use only.
+
+## Contributing and project direction
+
+Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Any coding
+CLI can use the shared instructions and run `python3 scripts/check.py`. See
+[the harness guide](docs/harness.md) for application checks and CLI compatibility.
+
+The [architecture contract](docs/architecture.md) defines the migration toward
+model-independent adapters and Settings: a fresh install will start without
+weights, show model/component licenses before download, and let the user choose
+main-model and VAE precision independently. These features are **planned**;
+the current launch/setup behavior is documented below. Track their acceptance
+scenarios in [harness/requirements.json](harness/requirements.json).
 
 ## Architecture
 
