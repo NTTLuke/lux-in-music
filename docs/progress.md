@@ -1,6 +1,47 @@
 # Project handoff
 
-## Current work: simple local installation guide
+## Current work: manual release build
+
+Branch: `feat/manual-release-build`, based on main after PR #9.
+
+- Added `release.sh` (entry point) and `scripts/release.py` (all steps): preflight,
+  repository checks, version bump, `CHANGELOG.md` entry, README release block,
+  release commit and tag, artifacts, push, GitHub release and asset verification.
+- Versioning comes from `pyproject.toml`. `./release.sh patch|minor|major` bumps
+  it; an explicit version such as `0.2.0` sets it; the current version can be
+  released as-is while it has no tag yet, which is how the first release is made.
+- Release notes are generated offline with `git log --first-parent`: merged pull
+  requests use their PR title and their branch prefix (`feat/`, `fix/`, `docs/`,
+  `test/`, `chore/`) for the section, and commits made directly on `main` are
+  categorized from their subject. No API call is needed to build the notes.
+- Artifacts are built from the tag itself: a source ZIP with the
+  `lux-in-music-<version>/` prefix (the folder the installation guide asks for),
+  the wheel, the sdist and `SHA256SUMS.txt`. The script then reads the published
+  release back and fails if an asset is missing or empty.
+- README gained "Releases and changelog" with the latest version and download
+  links, refreshed between `<!-- release:start -->` / `<!-- release:end -->`
+  markers; step 2 of the installation guide now downloads the release ZIP instead
+  of the moving source. `CHANGELOG.md` was added. AGENTS.md and CONTRIBUTING.md
+  document the command and the release-note conventions.
+- The script refuses to run on a dirty tree, away from `main`, when `main` is not
+  in sync with `origin/main`, when the tag exists, when `dist/` is not ignored, or
+  when Git has no `user.name`/`user.email`. `--dry-run` prints everything and
+  writes nothing, `--no-push` stops after the local build.
+- Verification: `python3 scripts/check.py` passes with the new files. The whole
+  flow was exercised end to end on a clone with a local bare remote (first
+  release at the current version, then a patch release): correct range from the
+  previous tag, correct `CHANGELOG.md` ordering, no duplicate sections when a step
+  is re-run, README markers replaced rather than duplicated, executable `studio.sh`
+  in the ZIP, and matching checksums. Error paths were exercised for a dirty tree,
+  another branch, an existing tag and an older requested version.
+- Limits: the run itself was tested on Linux; macOS uses the same `git`, `uv` and
+  `gh` commands, and the ZIP extracts with `studio.sh` marked executable in the
+  archive. `gh release create` and the asset read-back run for the first time on
+  the first real release, which is v0.1.0.
+- Next step: publish v0.1.0 from `main` and confirm the four downloadable assets,
+  then use `./release.sh patch` for follow-up fixes.
+
+## Delivered: simple local installation guide
 
 Branch: `docs/simple-local-installation`, based on main after PR #8.
 
