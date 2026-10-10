@@ -1,4 +1,4 @@
-"""Web studio: queue generations against audio.cpp and browse the library.
+"""Web studio: model Settings, profile-bound jobs and the song library.
 
     uv run uvicorn studio.app:app --port 8000
 """
@@ -9,6 +9,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -19,10 +20,19 @@ from pydantic import BaseModel, Field
 
 from . import edit, engine, separate
 from .params import GenerationParams
+from .models import get_manager, SetupRequired
+from .providers import get_provider, close_providers
 
 STATIC = Path(__file__).parent / "static"
 
-app = FastAPI(title="Lux In Music")
+@asynccontextmanager
+async def lifespan(app):
+    yield
+    get_manager().close()
+    close_providers()
+
+
+app = FastAPI(title="Lux In Music", lifespan=lifespan)
 
 
 @app.middleware("http")
@@ -58,8 +68,8 @@ def _estimate(job: dict) -> float:
         span = params["end_s"] - params["start_s"]
         sep = _sep_speed.get(params.get("mode", "4stems"), 0.5) * (span + 6)
         return 6 + 0.25 * dur + 0.3 * span + sep
-    target = params.get("max_duration_s") or params.get("semantic_max_tokens", 9000) / 25
-    return _speed["overhead"] + _speed["ratio"] * min(target, 360)
+    target = params.get("max_duration_s") or 60
+    return _speed["overhead"] + _speed["ratio"] * target
 
 
 def _worker() -> None:
@@ -74,16 +84,17 @@ def _worker() -> None:
             if job["kind"] == "stemedit":
                 p = job["params"]
                 res = separate.replace_stem(p["song"], p["set_id"], p["stem"], p["start_s"], p["end_s"],
-                                            p["seed"], p.get("lyrics"), p.get("variation", "new"))
+                                            p["seed"], p.get("lyrics"), p.get("variation", "new"),
+                                            job["profile"], job["separator_profile"])
                 job.update(status="done", result=res)
                 continue
             if job["kind"] == "separate":
                 p = job["params"]
-                res = separate.separate(p["song"], p["mode"], p.get("prompt"))
+                res = separate.separate(p["song"], p["mode"], p.get("prompt"), job["profile"])
                 job.update(status="done", result=res)
                 _sep_speed[p["mode"]] = res["elapsed_s"] / max(1.0, _song_duration(p["song"]))
                 continue
-            res = engine.generate(GenerationParams(**job["params"]))
+            res = engine.generate(GenerationParams(**job["params"]), profile=job["profile"])
             job.update(status="done", result=json.loads(res.meta_path.read_text()))
             if res.duration_s > 5:
                 r = max(0.1, (res.elapsed_s - _speed["overhead"]) / res.duration_s)
@@ -100,16 +111,68 @@ threading.Thread(target=_worker, daemon=True).start()
 @app.get("/api/health")
 def api_health():
     try:
-        return {"engine": "ok", **engine.health()}
+        return engine.health()
     except Exception as e:
-        return {"engine": "down", "error": str(e), "url": engine.ENGINE_URL}
+        return {"engine": "down", "error": str(e)}
+
+
+@app.get("/api/settings/catalog")
+def settings_catalog():
+    return {"models": get_manager().options()}
+
+
+@app.get("/api/settings/status")
+def settings_status():
+    return get_manager().status()
+
+
+class ModelSetup(BaseModel):
+    model_id: str
+    precision: str | None = None
+    vae_precision: str | None = None
+    license_review_id: str
+    accept_licenses: bool = False
+
+
+def start_model_setup(req, download):
+    try:
+        return get_manager().start(req.model_id, req.precision, req.vae_precision,
+                                   req.license_review_id, req.accept_licenses, download)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.post("/api/settings/download")
+def download_model(req: ModelSetup):
+    return start_model_setup(req, True)
+
+
+@app.post("/api/settings/activate")
+def activate_model(req: ModelSetup):
+    return start_model_setup(req, False)
+
+
+@app.post("/api/settings/jobs/{job_id}/cancel")
+def cancel_model_setup(job_id: str):
+    try:
+        get_manager().cancel(job_id)
+        return {"ok": True}
+    except ValueError as error:
+        raise HTTPException(404, str(error)) from error
 
 
 @app.post("/api/generate")
 def api_generate(params: GenerationParams):
+    try:
+        profile = get_manager().snapshot()
+        params = get_provider(profile).adapter(profile).normalize(params)
+    except SetupRequired as error:
+        raise HTTPException(409, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
     job_id = uuid.uuid4().hex[:8]
     jobs[job_id] = {"id": job_id, "kind": "generate", "status": "queued", "created": time.time(),
-                    "params": params.model_dump(exclude_none=True)}
+                    "params": params.model_dump(exclude_none=True), "profile": profile}
     _queue.put(job_id)
     return jobs[job_id]
 
@@ -148,6 +211,11 @@ def _load_meta(meta: Path) -> dict | None:
         changed = True
     if changed:
         meta.write_text(json.dumps(item, indent=2))
+    try:
+        profile = get_manager().song_profile(item)
+        item["can_edit"] = bool(get_provider(profile).adapter(profile).capabilities.get("semantic_edit"))
+    except ValueError:
+        item["can_edit"] = False
     return item
 
 
@@ -166,7 +234,15 @@ class SeparateRequest(BaseModel):
 
 @app.get("/api/lux/modes")
 def lux_modes():
-    return [{"id": m.id, "label": m.label, "stems": m.stems, "prompt": m.prompt} for m in separate.MODES.values()]
+    modes = []
+    for mode in separate.MODES.values():
+        try:
+            get_manager().separator(mode.id)
+            ready = True
+        except SetupRequired:
+            ready = False
+        modes.append({"id": mode.id, "label": mode.label, "stems": mode.stems, "prompt": mode.prompt, "ready": ready})
+    return modes
 
 
 @app.post("/api/lux/separate")
@@ -178,9 +254,13 @@ def lux_separate(req: SeparateRequest):
         raise HTTPException(422, f"unknown mode {req.mode}")
     if mode.prompt and not (req.prompt or "").strip():
         raise HTTPException(422, "describe the sound you want to extract")
+    try:
+        profile = get_manager().separator(mode.id)
+    except SetupRequired as error:
+        raise HTTPException(409, str(error)) from error
     job_id = uuid.uuid4().hex[:8]
     jobs[job_id] = {"id": job_id, "kind": "separate", "status": "queued", "created": time.time(),
-                    "params": req.model_dump(exclude_none=True)}
+                    "params": req.model_dump(exclude_none=True), "profile": profile}
     _queue.put(job_id)
     return jobs[job_id]
 
@@ -210,10 +290,18 @@ def edit_replace_stem(req: StemEditRequest):
     duration = _song_duration(req.song)
     if req.end_s - req.start_s < 1 or req.start_s >= duration:
         raise HTTPException(422, "select at least 1 second inside the song")
+    try:
+        meta = json.loads((engine.OUTPUT_DIR / f"{req.song}.json").read_text())
+        profile = get_manager().song_profile(meta)
+        if not get_provider(profile).adapter(profile).capabilities.get("semantic_edit"):
+            raise ValueError("This song's model does not support section editing")
+        sep_profile = get_manager().snapshot(base["model_profile"]) if base.get("model_profile") else get_manager().separator(base["mode"])
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
     job_id = uuid.uuid4().hex[:8]
     jobs[job_id] = {"id": job_id, "kind": "stemedit", "status": "queued", "created": time.time(),
                     "params": {**req.model_dump(exclude_none=True), "end_s": min(req.end_s, duration),
-                               "mode": base["mode"]}}
+                               "mode": base["mode"]}, "profile": profile, "separator_profile": sep_profile}
     _queue.put(job_id)
     return jobs[job_id]
 

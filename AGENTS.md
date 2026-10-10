@@ -22,15 +22,17 @@ tool does not load it automatically, read it explicitly before working.
 
 - Portable baseline: `python3 scripts/check.py` (Python 3.11+, Node.js, Bash).
 - Application checks: `.venv/bin/python scripts/check.py --full` after dependency setup.
+- Browser flow: `uv run --no-project --with playwright python scripts/check_ui.py`
+  with an installed Chrome, or `LUX_TEST_BROWSER` set to its executable.
 - Dependency setup: `uv sync --frozen` uses the committed lock file.
 - Lock consistency: `uv lock --check --offline` with an accessible uv cache.
 - Current app launcher: `./studio.sh`; individual UI: `scripts/run_studio.sh`.
 - Current generation CLI: `uv run studio-gen --help`.
 
-The checks never download models, call a real inference engine, or require a GPU.
+The automated checks never download models, call a real inference engine, or require a GPU.
 Actual audio changes also need a recorded audio test and listening check.
-The current `scripts/setup.sh` downloads weights; its replacement is pending.
-Use dependency setup alone when doing code-only work.
+`scripts/setup.sh` prepares software only. `studio.sh` runs it before launching
+the UI. Use dependency setup alone when doing code-only work.
 
 ## Architecture rules
 
@@ -39,8 +41,8 @@ Use dependency setup alone when doing code-only work.
   token rates, planning, and sampling belong to the relevant model adapter.
 - Future providers must declare capabilities; show only supported controls.
 - Separate generation model setup from optional separation model setup.
-- A fresh install must eventually open Settings without downloaded weights or
-  a running inference engine. Record this as pending until it actually works.
+- A fresh install opens Settings without downloaded weights or a running
+  inference engine. Keep this behavior covered by bootstrap and API tests.
 - Downloads require model and component license details shown beforehand and
   an explicit user action. Do not add silent downloads to install or startup.
 - Use exact artifact precision names. BF16 and FP16 are different formats.
@@ -75,9 +77,12 @@ See the architecture document for current limitations and the target design.
 ## Code map
 
 - `studio/app.py`: API, queue, library, static app serving.
-- `studio/engine.py`: current audio.cpp client and artifact storage.
-- `studio/params.py`: current YuE2 request validation (adapter extraction pending).
-- `studio/edit.py`, `studio/separate.py`: editing and separation.
+- `studio/engine.py`, `studio/params.py`: shared generation inputs and artifacts.
+- `studio/providers.py`: runtime registry, lifecycle, transport, compatibility probes.
+- `studio/adapters/`: model request validation, capabilities, token formats, editing.
+- `studio/models.py`, `config/model-catalog.json`: profiles, licenses, pinned downloads.
+- `studio/edit.py`, `studio/separate.py`, `studio/audio.py`: editing facade, separation, audio helpers.
+- `studio/bootstrap.py`, `studio/launch.py`: software build targets and UI-first launch.
 - `studio/static/`: browser UI, player, and multitrack studio.
 - `config/`, `scripts/`, `studio.sh`: current runtime setup and launch.
 - `harness/`, `tests/`, `scripts/check.py`: shared requirements and checks.

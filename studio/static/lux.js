@@ -46,6 +46,7 @@ const Lux = (() => {
     document.body.classList.toggle("lux-mode", on);
     document.getElementById("nav-create").classList.toggle("active", !on);
     document.getElementById("nav-lux").classList.toggle("active", on);
+    if (location.hash === "#/settings") document.getElementById("nav-create").classList.remove("active");
     if (!on) pause();
   }
   async function open(name) {
@@ -122,12 +123,12 @@ const Lux = (() => {
       <div class="lx-ask">
         <h2>What do you want to separate?</h2>
         <div class="lx-modes">${Object.entries(MODE_INFO).map(([id, m]) => `
-          <button class="lx-mode ${L.mode === id ? "on" : ""}" data-lx="mode" data-mode="${id}">
+          <button class="lx-mode ${L.mode === id ? "on" : ""}" data-lx="mode" data-mode="${id}" ${Settings.modeReady(id) ? "" : "disabled"}>
             <div class="lx-stem-dots">${m.stems.map((st) => `<span style="--c:${STEM_COLORS[st]}" title="${st}"><svg viewBox="0 0 24 24">${STEM_ICONS[st]}</svg></span>`).join("")}</div>
             <div class="lx-mode-title">${m.title}${has.has(id) && id !== "anything" ? '<span class="badge">done</span>' : ""}</div>
             <div class="lx-mode-desc">${m.desc}</div>
             <div class="lx-mode-stems">${id === "anything" ? "your sound + everything else" : m.stems.join(" · ")}</div>
-            <div class="lx-mode-model">${m.model}</div>
+            <div class="lx-mode-model">${m.model}${Settings.modeReady(id) ? "" : " · Set up in Settings"}</div>
           </button>`).join("")}
         </div>
         <div class="lx-prompt ${L.mode === "anything" ? "show" : ""}">
@@ -136,7 +137,7 @@ const Lux = (() => {
           <div class="tagbar">${PROMPT_IDEAS.map((p) => `<button type="button" data-lx="idea" data-p="${esc(p)}">${esc(p)}</button>`).join("")}</div>
           <div class="hint">Mono 48 kHz output. Uses ~3 GB of memory and is the slowest mode.</div>
         </div>
-        <button class="create-btn lx-go" data-lx="go"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Separate</button>
+        <button class="create-btn lx-go" data-lx="go" ${Settings.modeReady(L.mode) ? "" : "disabled"}><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Separate</button>
         <div class="error" id="lx-error"></div>
       </div>`;
     const inp = document.getElementById("lx-prompt");
@@ -185,7 +186,7 @@ const Lux = (() => {
           <button class="btn primary lx-export" data-lx="export"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Export mix</button>
         </div>
         <div class="lx-editbar" id="lx-editbar"></div>
-        <div class="lx-tracks" id="lx-tracks">${set.stems.map((st, i) => trackRow(st, i)).join("")}</div>
+        <div class="lx-tracks" id="lx-tracks">${set.stems.map((st, i) => trackRow(st, i, set)).join("")}</div>
         <div class="lx-foot"><b class="lx-tip">Tip:</b> press <b>Edit</b> on a track, then drag across its lane to regenerate that part of the stem only. Separated in ${fmt(set.elapsed_s)} with ${esc(MODE_INFO[set.mode].model)}${L.loadingSet ? " · loading audio…" : ""}</div>
       </div>`;
     syncTrackUI(); drawLanes(); updateTransport(); renderEditBar();
@@ -271,7 +272,7 @@ const Lux = (() => {
     renderEditBar(); pollJobs();
   }
 
-  function trackRow(st, i) {
+  function trackRow(st, i, set) {
     const c = STEM_COLORS[st.id] || "#f0a23c";
     return `
       <div class="lx-track ${st.silent ? "no-signal" : ""}" data-i="${i}" style="--c:${c}">
@@ -282,7 +283,7 @@ const Lux = (() => {
             <button class="lx-ms" data-lx="mute" data-i="${i}" title="Mute">M</button>
             <button class="lx-ms" data-lx="solo" data-i="${i}" title="Solo">S</button>
             <input type="range" min="0" max="1.5" step="0.01" value="1" data-lx="vol" data-i="${i}" title="Volume">
-            <button class="lx-edit-btn" data-lx="arm" data-i="${i}" title="Edit a part of ${esc(st.label)}"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg><span>Edit</span></button>
+            ${Settings.canEdit(L.song) && Settings.modeReady(set.mode) ? `<button class="lx-edit-btn" data-lx="arm" data-i="${i}" title="Edit a part of ${esc(st.label)}"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg><span>Edit</span></button>` : ""}
             <a class="icon-btn" href="/outputs/${st.file}" download="${esc(L.song.name)}-${esc(st.id)}.wav" title="Download stem"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></a>
           </div>
         </div>

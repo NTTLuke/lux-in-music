@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start the studio web UI on http://127.0.0.1:8000 (needs scripts/run_engine.sh running)
+# Start the UI with existing software dependencies. No engine or model is required.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if pid=$(lsof -tiTCP:8000 -sTCP:LISTEN); then
@@ -7,4 +7,4 @@ if pid=$(lsof -tiTCP:8000 -sTCP:LISTEN); then
   echo "If it's an old studio, stop it with:  kill $pid"
   exit 1
 fi
-exec uv run uvicorn studio.app:app --host 127.0.0.1 --port 8000 "$@"
+exec uv run --frozen python -m studio.launch "$@"

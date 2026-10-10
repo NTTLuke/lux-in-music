@@ -1,21 +1,20 @@
-"""Thin client for the audiocpp_server running the YuE2 model."""
+"""Shared generation and artifact storage, using the job's selected provider."""
 
 import array
 import base64
 import json
 import os
+import io
 import re
 import time
 import wave
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import httpx
-
 from .params import GenerationParams
+from .models import get_manager
+from .providers import get_provider
 
-ENGINE_URL = os.environ.get("AUDIOCPP_URL", "http://127.0.0.1:8089")
-MODEL_ID = os.environ.get("AUDIOCPP_MODEL", "yue2")
 OUTPUT_DIR = Path(os.environ.get("STUDIO_OUTPUT_DIR", Path(__file__).resolve().parent.parent / "outputs"))
 
 
@@ -64,22 +63,21 @@ def compute_peaks(wav_path: Path, buckets: int = 160, normalize: bool = True) ->
 
 
 def health() -> dict:
-    r = httpx.get(f"{ENGINE_URL}/health", timeout=5)
-    r.raise_for_status()
-    return r.json()
+    status = get_manager().status()
+    return {"engine": "ok" if status["active"] else "down",
+            "backend": status["active"]["validation"]["backend"] if status["active"] else None,
+            "setup_required": status["setup_required"]}
 
 
-def generate(params: GenerationParams, name: str | None = None) -> GenerationResult:
-    request = params.to_request()
-    request["options"]["export_semantic"] = "true"  # kept for section replacement / continuation
-    body = {"model": MODEL_ID, "request": request}
+def generate(params: GenerationParams, name: str | None = None, profile: dict | None = None) -> GenerationResult:
+    profile = get_manager().snapshot(profile)
+    provider = get_provider(profile)
+    adapter = provider.adapter(profile)
+    normalized = adapter.normalize(params)
+    request = adapter.request(params)
     t0 = time.time()
-    # A full song can take several minutes on Apple Silicon: no read timeout.
-    r = httpx.post(f"{ENGINE_URL}/v1/tasks/run", json=body, timeout=httpx.Timeout(10, read=None))
+    data = provider.run(profile, request)
     elapsed = time.time() - t0
-    if r.status_code != 200:
-        raise RuntimeError(f"audio.cpp error {r.status_code}: {r.text[:500]}")
-    data = r.json()
     if "audio" not in data:
         raise RuntimeError(f"no audio in response: {list(data)}")
 
@@ -90,27 +88,32 @@ def generate(params: GenerationParams, name: str | None = None) -> GenerationRes
     wav = base64.b64decode(data["audio"])
     wav_path.write_bytes(wav)
 
-    sr, ch = int(data["sample_rate"]), int(data["channels"])
-    duration = (len(wav) - 44) / (sr * ch * 2)  # PCM16 WAV
+    with wave.open(io.BytesIO(wav)) as audio:
+        sr, ch = audio.getframerate(), audio.getnchannels()
+        duration = audio.getnframes() / sr
 
     artifacts = {}
+    artifact_meta = {}
     for art in data.get("artifacts", []):
         ext = {"score": "abc", "semantic": "semantic.json"}.get(art["id"], "bin")
         p = OUTPUT_DIR / f"{stem}.{ext}"
         p.write_bytes(base64.b64decode(art["payload"]))
         artifacts[art["id"]] = p
+        artifact_meta[art["id"]] = art.get("meta", {})
 
     meta_path = OUTPUT_DIR / f"{stem}.json"
     meta_path.write_text(json.dumps({
         "name": stem,
         "title": title,
         "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
-        "params": params.model_dump(exclude_none=True),
+        "params": normalized.model_dump(exclude_none=True),
+        "model_profile": profile,
         "duration_s": round(duration, 2),
         "elapsed_s": round(elapsed, 1),
         "sample_rate": sr,
         "channels": ch,
         "artifacts": {k: v.name for k, v in artifacts.items()},
+        "artifact_meta": artifact_meta,
         "peaks": compute_peaks(wav_path),
     }, indent=2))
     return GenerationResult(wav_path, meta_path, duration, elapsed, sr, ch, artifacts)

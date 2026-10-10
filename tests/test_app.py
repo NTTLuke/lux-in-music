@@ -9,7 +9,7 @@ from unittest.mock import patch
 import httpx
 from pydantic import ValidationError
 
-from studio.params import GenerationParams
+from studio.adapters.yue2 import YuE2Params as GenerationParams
 
 ROOT = Path(__file__).resolve().parents[1]
 

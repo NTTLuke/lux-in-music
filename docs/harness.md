@@ -15,7 +15,8 @@ does not run an autonomous agent or depend on one agent vendor's SDK.
 | `docs/progress.md` | Verified state, open limitations, next steps |
 | `scripts/check.py` | Portable baseline and application verification entry point |
 | `tests/` | Offline harness/application regression checks |
-| `.github/workflows/checks.yml` | Baseline gate on pushes and pull requests |
+| `scripts/check_ui.py` | Isolated browser flow using fake providers/downloads |
+| `.github/workflows/checks.yml` | Baseline and offline application gates on pushes and pull requests |
 
 ## CLI compatibility
 
@@ -43,16 +44,31 @@ for retired branding, metadata/lock agreement, Python/JavaScript/shell syntax,
 instruction bridges, and requirement-ledger structure. It also runs the harness's
 own regression tests. It does not install dependencies or download weights.
 
-`--full` adds offline application tests using installed Python dependencies: API
-branding/health behavior, CLI help, and generation request validation. Runtime
-calls are faked. An unavailable dependency fails the check instead of being
-reported as a passing application test.
+`--full` adds offline application tests using installed Python dependencies:
+bootstrap scripts with fake installers, empty-install API/library behavior,
+license gates, precision manifests, download integrity/resume/cancellation,
+profile persistence, runtime compatibility and provider-independent generation.
+Runtime calls are faked. An unavailable dependency fails the check.
+
+The separate browser check needs Playwright and an installed Chrome:
+
+```bash
+uv run --no-project --with playwright python scripts/check_ui.py
+```
+
+It runs an isolated app with tiny fake files, never touches real Settings/model
+data, and covers Settings-first navigation, licensing, independent BF16/F32
+selection, activation, capability controls, generation, library and mobile
+navigation. `LUX_TEST_BROWSER` can specify another installed Chrome executable.
+Screenshots go to ignored `outputs/checks/ui/`, or a chosen `--artifacts` directory.
+The browser check is separate from GPU/network-free CI; Playwright may need a
+one-time dependency download, but the test never downloads a browser or model.
 
 `--require-complete` is a product-readiness audit. It requires `--full` checks and
 fails while any recorded requirement is planned. It is expected to fail during
-the migration. The normal CI baseline can pass while features are still planned;
+the song-ending work. Normal CI can pass while that feature is still planned;
 the output explicitly lists those features. Passing checks never claim that an
-unimplemented Settings flow or a song's audio quality has been verified.
+song-ending behavior or audio quality has been verified.
 
 The baseline scans files tracked by Git plus new, nonignored files. A source
 archive without Git falls back to the project tree, excluding generated data,
@@ -63,7 +79,7 @@ dependencies, and the vendored runtime. It checks filenames as well as contents.
 Read its acceptance scenarios and related issue. Add the smallest useful tests at
 the real boundary, implement the behavior, and run the relevant checks. Add an
 automated `unittest` selector to its `tests` list when setting `status` to
-`implemented`. The full harness runs each implemented requirement's selectors;
+`implemented`. The full harness runs the unique selectors shared by implemented requirements;
 a missing, empty, or skipped test cannot establish completion.
 
 Record results and limitations in `docs/progress.md`. UI requirements also need a

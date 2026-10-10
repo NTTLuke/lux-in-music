@@ -10,11 +10,12 @@ import wave
 from dataclasses import dataclass
 from pathlib import Path
 
-import httpx
 import numpy as np
 import soxr
 
 from . import engine
+from .models import get_manager
+from .providers import get_provider
 
 STEMS_DIR = engine.OUTPUT_DIR / "stems"
 
@@ -71,19 +72,24 @@ def stem_set_dir(song: str, mode: str, prompt: str | None) -> Path:
     return STEMS_DIR / song / f"{mode}{suffix}"
 
 
-def separate_audio(audio: np.ndarray, sr: int, mode: Mode, prompt: str | None) -> tuple[list[dict], float]:
+def separate_audio(audio: np.ndarray, sr: int, mode: Mode, prompt: str | None, profile=None) -> tuple[list[dict], float]:
     """Run a separator on an in-memory clip; returns [{id, audio, sr}] in the mode's stem order."""
-    if sr != mode.sample_rate:
-        audio = soxr.resample(audio, sr, mode.sample_rate, quality="VHQ")
-    request: dict = {"audio_base64": base64.b64encode(_wav_bytes(audio, mode.sample_rate)).decode()}
+    profile = get_manager().snapshot(profile) if profile else get_manager().separator(mode.id)
+    # Keep the mode rate as a migration fallback for profiles saved before this field.
+    audio_format = profile.get("input_audio", {})
+    sample_rate = audio_format.get("sample_rate", mode.sample_rate)
+    channels = audio_format.get("channels", audio.shape[1])
+    if sr != sample_rate:
+        audio = soxr.resample(audio, sr, sample_rate, quality="VHQ")
+    if channels == 1 and audio.shape[1] != 1:
+        audio = audio.mean(axis=1, keepdims=True)
+    elif channels == 2 and audio.shape[1] == 1:
+        audio = np.repeat(audio, 2, axis=1)
+    request: dict = {"audio_base64": base64.b64encode(_wav_bytes(audio, sample_rate)).decode()}
     if mode.prompt:
         request.update(text=prompt.strip(), seed=42)
     t0 = time.time()
-    r = httpx.post(f"{engine.ENGINE_URL}/v1/tasks/run", json={"model": mode.model, "request": request},
-                   timeout=httpx.Timeout(10, read=None))
-    if r.status_code != 200:
-        raise RuntimeError(f"audio.cpp error {r.status_code}: {r.text[:400]}")
-    outputs = r.json().get("named_audio_outputs") or []
+    outputs = get_provider(profile).run(profile, request).get("named_audio_outputs") or []
     if not outputs:
         raise RuntimeError("separator returned no stems")
     order = {name: i for i, name in enumerate(mode.stems)}
@@ -107,7 +113,7 @@ def _stem_label(mode: Mode, stem_id: str, prompt: str | None) -> str:
     return stem_id
 
 
-def separate(song: str, mode_id: str, prompt: str | None = None) -> dict:
+def separate(song: str, mode_id: str, prompt: str | None = None, profile=None) -> dict:
     mode = MODES[mode_id]
     src = engine.OUTPUT_DIR / f"{song}.wav"
     if not src.exists():
@@ -116,7 +122,8 @@ def separate(song: str, mode_id: str, prompt: str | None = None) -> dict:
         raise ValueError("describe the sound to extract")
 
     audio, sr = _read_wav(src)
-    outputs, elapsed = separate_audio(audio, sr, mode, prompt)
+    profile = get_manager().snapshot(profile) if profile else get_manager().separator(mode_id)
+    outputs, elapsed = separate_audio(audio, sr, mode, prompt, profile)
 
     out_dir = stem_set_dir(song, mode_id, prompt if mode.prompt else None)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -130,6 +137,7 @@ def separate(song: str, mode_id: str, prompt: str | None = None) -> dict:
     meta = {
         "song": song, "mode": mode_id, "mode_label": mode.label, "prompt": prompt if mode.prompt else None,
         "created": time.strftime("%Y-%m-%dT%H:%M:%S"), "elapsed_s": round(elapsed, 1), "stems": stems,
+        "model_profile": profile,
     }
     (out_dir / "stems.json").write_text(json.dumps(meta, indent=2))
     meta["id"] = out_dir.name
@@ -140,7 +148,7 @@ MARGIN_S = 3.0  # context around the selection given to the separator
 
 
 def replace_stem(song: str, set_id: str, stem_id: str, start_s: float, end_s: float, seed: int,
-                 lyrics: str | None = None, variation: str = "new") -> dict:
+                 lyrics: str | None = None, variation: str = "new", profile=None, separator_profile=None) -> dict:
     """Regenerate [start_s, end_s) of one stem: new take of the song, separated, only that stem swapped in."""
     from . import edit  # local import: edit imports engine only, no cycle at module load
 
@@ -152,12 +160,14 @@ def replace_stem(song: str, set_id: str, stem_id: str, start_s: float, end_s: fl
         raise ValueError(f"no stem {stem_id} in this set")
 
     t0 = time.time()
-    take, info = edit.render_section(song, start_s, end_s, seed, lyrics, variation)   # 48 kHz composite
+    take, info = edit.render_section(song, start_s, end_s, seed, lyrics, variation, profile)   # 48 kHz composite
     a_s, b_s = info["start_s"], info["end_s"]
+    sample_rate = info["sample_rate"]
     lo = max(0.0, a_s - MARGIN_S)
-    hi = min(len(take) / edit.SR, b_s + MARGIN_S)
-    clip = take[int(lo * edit.SR):int(hi * edit.SR)]
-    outputs, _ = separate_audio(clip, edit.SR, mode, base.get("prompt"))
+    hi = min(len(take) / sample_rate, b_s + MARGIN_S)
+    clip = take[int(lo * sample_rate):int(hi * sample_rate)]
+    separator_profile = separator_profile or (get_manager().snapshot(base["model_profile"]) if base.get("model_profile") else get_manager().separator(mode.id))
+    outputs, _ = separate_audio(clip, sample_rate, mode, base.get("prompt"), separator_profile)
     new = next((o for o in outputs if o["id"] == stem_id), None)
     if new is None:
         raise RuntimeError(f"separator did not return {stem_id}")
@@ -187,7 +197,7 @@ def replace_stem(song: str, set_id: str, stem_id: str, start_s: float, end_s: fl
     meta = {
         **{k: base[k] for k in ("song", "mode", "mode_label", "prompt")},
         "created": time.strftime("%Y-%m-%dT%H:%M:%S"), "elapsed_s": round(time.time() - t0, 1), "stems": stems,
-        "base": set_id,
+        "base": set_id, "model_profile": separator_profile,
         "edit": {"stem": stem_id, "label": target["label"], "start_s": a_s, "end_s": b_s, "seed": info["seed"],
                  "variation": variation,
                  "new_lyrics": info["lyrics"] != info["meta"]["params"]["lyrics"]},
