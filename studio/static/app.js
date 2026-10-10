@@ -140,9 +140,11 @@ function setupGenreTemplates() {
   $("template-grid").onclick = (event) => {
     const button = event.target.closest("[data-template]"); if (!button) return;
     const template = GENRE_TEMPLATES.find((item) => item.id === button.dataset.template);
+    $("lyrics").value = DEMOS.find((demo) => demo.id === "lux-tenebris").params.lyrics;
+    updateLyricsCount();
     $("style").value = template.style;
     syncChips();
-    $("template-status").textContent = `${template.name} style applied.`;
+    $("template-status").textContent = `${template.name} template applied.`;
   };
   syncChips();
 }

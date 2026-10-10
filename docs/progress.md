@@ -10,12 +10,13 @@ Branch: `feat/create-layout-genre-templates`, based on main after PR #7.
   below 1320 px to keep song titles and actions usable.
 - An expandable Genre templates section beneath the existing Melodic Techno
   demo offers five styles: Progressive Metal, Indie Pop, Cinematic Synthwave,
-  Soul & R&B, and Jazz Fusion. Applying one changes only the common style input,
-  preserving lyrics, title, duration, seed and planning. It sends no generation
+  Soul & R&B, and Jazz Fusion. Following the user's correction, every template
+  loads the same lyric text as the Melodic Techno demo with its genre style,
+  preserving title, duration, seed and planning. It sends no generation
   request. Selection is highlighted and cleared when the style is edited.
 - Portable baseline and full offline harness passed (67 tests). The extended
   isolated Chrome flow passed with no JavaScript errors: all five presets apply,
-  preserve song fields and cause no generation requests; the demo remains in
+  load the exact demo lyrics, preserve title/settings and cause no generation requests; the demo remains in
   Create. Layout checked at 1440/1280/1024/900/390 px without horizontal overflow.
   Desktop and mobile screenshots were inspected under `/private/tmp/lux-templates-ui/`.
 - No real audio generation was run for this change. These are style starting
