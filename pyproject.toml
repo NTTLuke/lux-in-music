@@ -1,7 +1,7 @@
 [project]
-name = "suno-studio-killer"
+name = "lux-in-music"
 version = "0.1.0"
-description = "Local Suno-Studio-style music generation POC on top of YuE2 (audio.cpp)"
+description = "Local generative music studio using models compatible with audio.cpp"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",

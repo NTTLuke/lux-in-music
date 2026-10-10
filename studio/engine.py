@@ -35,7 +35,7 @@ def slugify(text: str) -> str:
 
 
 def auto_title(lyrics: str) -> str:
-    """First lyric line (preferring the chorus hook), trimmed to a few words, like Suno does."""
+    """Use a short lyric phrase as the title, preferring the chorus hook."""
     lines = [l.strip() for l in lyrics.splitlines()]
     try:
         start = next(i for i, l in enumerate(lines) if l.lower().startswith("[chorus"))

@@ -1,0 +1,76 @@
+import asyncio
+import subprocess
+import sys
+import tomllib
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import httpx
+from pydantic import ValidationError
+
+from studio.params import GenerationParams
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class ProductIdentityTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from studio.app import app
+        cls.app = app
+
+    def get(self, path):
+        async def request():
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app), base_url="http://studio.test") as client:
+                return await client.get(path)
+        return asyncio.run(request())
+
+    def test_browser_and_api_names_match_the_product(self):
+        page = self.get("/")
+        schema = self.get("/openapi.json")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("<title>Lux In Music</title>", page.text)
+        self.assertEqual(schema.json()["info"]["title"], "Lux In Music")
+
+    def test_project_and_lock_package_identity_match(self):
+        project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
+        lock = tomllib.loads((ROOT / "uv.lock").read_text())
+        editable = next(p for p in lock["package"] if p.get("source") == {"editable": "."})
+        self.assertEqual(project["name"], "lux-in-music")
+        self.assertEqual(editable["name"], project["name"])
+        self.assertEqual(editable["version"], project["version"])
+
+    def test_generation_cli_help_needs_no_engine(self):
+        result = subprocess.run([sys.executable, "-m", "studio.cli", "--help"], cwd=ROOT, capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--lyrics", result.stdout)
+        self.assertIn("--max-duration", result.stdout)
+
+    def test_engine_offline_health_remains_a_valid_ui_response(self):
+        with patch("studio.engine.health", side_effect=RuntimeError("engine unavailable")):
+            response = self.get("/api/health")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["engine"], "down")
+
+
+class RequestBoundaryTests(unittest.TestCase):
+    def params(self, **changes):
+        return GenerationParams(lyrics="[Verse]\nA song", style="English, pop", **changes)
+
+    def test_duration_cap_maps_to_codec_budget_not_a_false_completion_flag(self):
+        request = self.params(max_duration_s=180).to_request()
+        self.assertEqual(request["options"]["semantic_max_tokens"], "4500")
+        self.assertNotIn("max_duration_s", request["options"])
+        self.assertNotIn("completed", request)
+
+    def test_short_cap_does_not_conflict_with_engine_default_minimum(self):
+        request = self.params(max_duration_s=4).to_request()
+        self.assertEqual(request["options"]["semantic_min_tokens"], "100")
+        self.assertEqual(request["options"]["semantic_max_tokens"], "100")
+
+    def test_conflicting_token_limits_and_unsupported_score_route_fail(self):
+        with self.assertRaises(ValidationError):
+            self.params(semantic_min_tokens=201, semantic_max_tokens=200)
+        with self.assertRaises(ValidationError):
+            self.params(abc="X:1\nK:C\nC4|", cot="off")
