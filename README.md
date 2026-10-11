@@ -205,6 +205,19 @@ To use another port, run:
 
 The browser address is then [http://127.0.0.1:8001](http://127.0.0.1:8001).
 
+The studio listens only on this Mac by default. To open it from another device,
+choose an address you trust, such as your home network or Tailscale address:
+
+```bash
+./studio.sh --host 192.168.1.20
+```
+
+The studio has no login. Anyone who can reach that address can generate songs,
+remove jobs, download your songs and start model downloads. `--host 0.0.0.0`
+listens on every network, including public Wi-Fi. To use the studio from another
+computer you control, an SSH tunnel keeps it private:
+`ssh -L 8000:127.0.0.1:8000 your-mac`.
+
 For help, open [an issue](https://github.com/NTTLuke/lux-in-music/issues) and include
 your Mac chip, memory, what step failed and the last relevant Terminal error lines.
 Your songs are saved in the **outputs** folder inside the project; keep that
@@ -267,7 +280,7 @@ prepares software only; `scripts/run_studio.sh` starts an already prepared UI.
 uv is installed locally if missing, Python 3.12 is prepared through uv, and
 CMake 3.31.6 is supplied when needed. Source submodules use HTTPS, without a
 GitHub SSH key. Startup downloads no model weights. The UI binds to
-`127.0.0.1`, and Control + C stops it and its owned inference processes.
+`127.0.0.1` unless `--host` is given, and Control + C stops it and its owned inference processes.
 
 ### Other platforms
 

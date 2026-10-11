@@ -74,3 +74,27 @@ class RequestBoundaryTests(unittest.TestCase):
             self.params(semantic_min_tokens=201, semantic_max_tokens=200)
         with self.assertRaises(ValidationError):
             self.params(abc="X:1\nK:C\nC4|", cot="off")
+
+
+class LaunchHostTests(unittest.TestCase):
+    def launch(self, *argv):
+        import contextlib, io
+        from studio import launch
+        out = io.StringIO()
+        with patch.object(sys, "argv", ["launch", "--no-open", *argv]), patch("uvicorn.run") as run, \
+                contextlib.redirect_stdout(out):
+            launch.main()
+        return run.call_args.kwargs["host"], out.getvalue()
+
+    def test_local_by_default_and_warns_when_listening_elsewhere(self):
+        host, out = self.launch()
+        self.assertEqual(host, "127.0.0.1")
+        self.assertIn("http://127.0.0.1:8000", out)
+        self.assertNotIn("WARNING", out)
+        for given, shown in [("0.0.0.0", "http://127.0.0.1:8000"), ("192.168.1.20", "http://192.168.1.20:8000"),
+                             ("fd7a::1", "http://[fd7a::1]:8000")]:
+            with self.subTest(host=given):
+                host, out = self.launch("--host", given)
+                self.assertEqual(host, given)
+                self.assertIn(shown, out)
+                self.assertIn("no login", out)
