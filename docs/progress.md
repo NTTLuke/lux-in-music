@@ -1,5 +1,38 @@
 # Project handoff
 
+## Current work: Complete Arrangement rejects a near-target vocal plan
+
+Branch: `fix/hip-hop-arrangement-length`, issue #18.
+
+- Reproduced the supplied style and lyrics with the installed YuE2 Q8_0/F16
+  profile, seed 1234 and 240 s target. It completed with EOS: 154.56 s audio from
+  a 154.52 s plan (94 bars at 73 BPM). This confirms the prompt itself is valid;
+  the default 240 s target succeeds and is reported as shorter than target.
+- At a 120 s target, the same input failed before semantic composition. Planner
+  seeds 1234/1235/1236 in one run required 127 s at 73 BPM, 159 s at 100 BPM,
+  and 187 s at 95 BPM. The error showed the last, longest attempt instead of
+  the shortest plan, obscuring how close the best candidate was to fitting.
+- A separate real run with the correct 120 s UI request and 135 s hard cap
+  showed why duration tolerance alone was not enough: the planner made a
+  154.52 s score at 73 BPM despite the explicit 100 BPM in the style. At 73 BPM,
+  its 94 mostly vocal bars could not be shortened to fit the cap without
+  deleting vocals.
+- Generated scores now honor one unambiguous BPM in the user's style. The same
+  score becomes 112.8 s at 100 BPM, keeping every vocal bar and fitting the
+  120 s target. If every seed remains too long, the error reports the shortest
+  measured plan and tempo.
+- Verification: synthetic regression tests check tempo override, EOS handling,
+  and shortest-plan diagnostics. The private prompt is not stored in the repo.
+  Full real inference at a 120 s target / 135 s cap completed with EOS in
+  112.76 s at 100 BPM, seed 1234, without truncation. Before the fix, the
+  240 s run ended cleanly at 154.56 s at 73 BPM and was labelled shorter than
+  target; the 240 s setting itself was not the failing case.
+- Limits: tempo is changed only when the style names one unambiguous BPM; an
+  unspecified or ranged BPM keeps the planner tempo. Long vocal passages may
+  still need a longer target or shorter lyrics. The new 112.76 s result has not
+  received the user's listening acceptance.
+- Next step: update issue #18 and review the resulting PR.
+
 ## Current work: delete a song
 
 - Song details have a Delete button with a confirmation. `DELETE /api/songs/{song}`
