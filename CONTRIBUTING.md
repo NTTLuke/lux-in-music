@@ -48,8 +48,10 @@ The preview validates inputs and runs the portable and offline application
 checks, without changing the version or publishing anything.
 
 To publish, run it again with **Preview only** unchecked. It uses the same
-`release.sh` command as the local build, commits the version and release notes,
-creates the tag, builds the ZIP/wheel/sdist/checksums, uploads and verifies them.
+`release.sh` command as the local build, creates a version tag on the selected
+main commit, builds the ZIP/wheel/sdist/checksums, uploads and verifies them.
+The package version is set inside a temporary build copy. The workflow pushes
+only the tag and leaves `main`, README and CHANGELOG unchanged.
 No personal access token, model download, native engine or GPU is needed.
 Only maintainers with workflow access can start it; publication runs from main.
 Preview uses a read-only token; only the publication job has `contents: write`.
@@ -57,13 +59,11 @@ Official actions are pinned to commits, inputs are validated as data, and
 concurrent releases wait rather than cancelling an active publication.
 
 The run uses the selected main commit and refuses publication if main has moved.
-Retry from current main in that case. Branch/tag protection must allow the release
-identity to push; do not disable protections just to resolve a failed run. If a
-push or upload fails after a tag was created, inspect the run and its seven-day
-`release-files` artifact before retrying. Do not delete an existing published tag.
-Commits pushed with `GITHUB_TOKEN` do not trigger another push workflow; the
-release command itself runs full checks before and after the version update.
-Preview verifies the plan and tests; the package build/upload runs on publication.
+Retry from current main in that case. Branch protection can continue requiring
+pull requests; release publication does not push to main. If a push or upload
+fails after a tag was created, inspect the run and its seven-day `release-files`
+artifact before retrying. Do not delete an existing published tag. Preview runs
+the full checks; the package build/upload runs on publication.
 
 ### From a local machine
 
@@ -71,17 +71,18 @@ A release is also a manual, single-command build from an up-to-date `main`:
 
 ```bash
 ./release.sh minor --dry-run    # preview the notes and the plan
-./release.sh minor              # version, tag, artifacts, GitHub release
+./release.sh minor              # tag, artifacts, GitHub release; main stays unchanged
 ```
 
 `./release.sh` accepts `major`, `minor`, `patch`, or an explicit version such as
 `0.2.0`, and refuses to run on a dirty tree, on another branch, when `main` is not
 in sync with `origin/main`, or when the tag already exists. It runs
-`scripts/check.py` (add `--full-checks` for the application checks), bumps
-`pyproject.toml`, writes the `CHANGELOG.md` entry and the README release block,
+`scripts/check.py` (add `--full-checks` for the application checks), sets the
+package version in a temporary copy, creates a tag on the current `main` commit,
 then publishes the source ZIP, wheel, sdist and `SHA256SUMS.txt`, and verifies the
-uploaded files. Use `--no-push` to build locally, and `--skip-checks` only when the
-same revision has already passed the checks.
+uploaded files. README, CHANGELOG and `main` stay unchanged. Use `--no-push` to
+build locally, and `--skip-checks` only when the same revision has already passed
+the checks.
 
 Release notes are generated with `git log --first-parent` since the previous tag:
 merged pull requests are listed by their PR title, categorized by the branch prefix

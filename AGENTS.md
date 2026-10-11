@@ -29,8 +29,8 @@ tool does not load it automatically, read it explicitly before working.
 - Current app launcher: `./studio.sh`; individual UI: `scripts/run_studio.sh`.
 - Current generation CLI: `uv run studio-gen --help`.
 - Release: `./release.sh patch|minor|major|<x.y.z>` from `main`, with `--dry-run`
-  to preview. It writes the version, `CHANGELOG.md` and the README release block,
-  then tags, builds and publishes the artifacts. See CONTRIBUTING.md.
+  to preview. It leaves `main`, README and CHANGELOG unchanged; it creates and
+  publishes a version tag, release notes and versioned artifacts. See CONTRIBUTING.md.
 
 The automated checks never download models, call a real inference engine, or require a GPU.
 Actual audio changes also need a recorded audio test and listening check.

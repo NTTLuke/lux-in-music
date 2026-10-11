@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 
-from release import ROOT, next_version, read_version
+from release import ROOT, current_release_version, next_version
 
 
 def release_command(env):
@@ -16,7 +16,7 @@ def release_command(env):
         raise ValueError("Choose patch, minor or major.")
     version = env.get("RELEASE_VERSION", "").strip()
     # Parse the complete value before passing it as a positional argument.
-    next_version(read_version(), version or bump)
+    next_version(current_release_version(), version or bump)
     dry_run = env.get("RELEASE_DRY_RUN")
     if dry_run not in {"true", "false"}:
         raise ValueError("Preview must be true or false.")

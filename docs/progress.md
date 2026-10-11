@@ -1,5 +1,31 @@
 # Project handoff
 
+## Current work: publish releases without changing main
+
+Branch: `fix/release-without-main-commit`.
+
+- The release workflow now derives the next version from the newest reachable
+  release tag as well as `pyproject.toml`. This supports releases while `main`
+  remains unchanged between versions.
+- Release assets are built from a temporary copy of tracked `HEAD`; only that
+  copy receives the release version in `pyproject.toml` and `uv.lock`. The source
+  ZIP, wheel and sdist carry the selected version, while the checkout, README,
+  CHANGELOG and `main` ref remain unchanged.
+- Publication creates and pushes an annotated version tag on the current `main`
+  commit, then uploads the assets and release notes. Branch protection can keep
+  requiring pull requests. Tag rules may block updates and deletions while still
+  allowing new release tags.
+- Tests verify tag-based version selection, staged metadata, unchanged checkout
+  version, release ZIP metadata and executable file permissions. `python3
+  scripts/check.py` passes; `.venv/bin/python scripts/check.py --full` passes
+  with 118 tests.
+- A local release build of synthetic version `9.8.7` produced the source ZIP,
+  wheel, sdist and checksums from the staging copy. The checkout still declares
+  `0.3.1`; generated test artifacts were removed. Preview the GitHub workflow
+  before the next real publication.
+- Next step: run the Release workflow's preview from `main` after this change
+  merges, then use the workflow to publish the next version when ready.
+
 ## Current work: infer song length inside generation
 
 Branch: `feat/implicit-duration-generation`, issue #18.
