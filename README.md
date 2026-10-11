@@ -143,10 +143,10 @@ for commercial use. Licenses are shown before each download.
 
 ### 5. Create your first song
 
-These steps describe the latest source on **main**, which includes duration
-analysis. The **v0.2.0** release ZIP does not include it yet. To try this feature,
-download the [latest source ZIP](https://github.com/NTTLuke/lux-in-music/archive/refs/heads/main.zip)
-and follow the same installation steps.
+These steps apply to **v0.3.0 and later**, which include duration analysis.
+If you have an older release, download the [latest release](https://github.com/NTTLuke/lux-in-music/releases/latest)
+to get this feature. The [latest source ZIP](https://github.com/NTTLuke/lux-in-music/archive/refs/heads/main.zip)
+uses the same installation steps.
 
 1. Click **Create** in the sidebar.
 2. Click **Demo · Melodic Techno** to load the example lyrics and a four-minute

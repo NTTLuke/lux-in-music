@@ -1,5 +1,16 @@
 # Project handoff
 
+## Release v0.3.0
+
+- The user requested a new version after merging PR #20. A minor release includes
+  duration analysis/review, plan reuse, explicit-BPM fitting and the updated
+  installation guide. README identifies v0.3.0 as the first release with this flow.
+- Build and publication use `./release.sh minor --full-checks`, after its dry run,
+  from synchronized main. The release creates source ZIP, wheel, sdist and checksums.
+- GitHub CLI is downloaded temporarily from its official release with its archive
+  checksum verified; authentication uses the existing GitHub access. No model or
+  song files are included, and no private lyrics or prompts enter release notes.
+
 ## Current work: review a duration estimate before creating audio
 
 Branch: `feat/duration-analysis`, related to issue #18.
