@@ -107,6 +107,18 @@ class YuE2Adapter:
             data[key] = value
         return YuE2Params(**data)
 
+    @staticmethod
+    def _requested_bpm(style):
+        """Return one explicit style BPM target, ignoring ranges and conflicts."""
+        import re
+        if re.search(r"\b\d{2,3}\s*(?:[-–—]|to)\s*\d{2,3}\s*BPM\b", style, re.IGNORECASE):
+            return None
+        values = {int(value) for value in re.findall(r"\b(\d{2,3})\s*BPM\b", style, re.IGNORECASE)}
+        if len(values) != 1:
+            return None
+        bpm = values.pop()
+        return bpm if 30 <= bpm <= 300 else None
+
     def request(self, params):
         request = self.normalize(params).to_request()
         request["options"]["export_semantic"] = "true"
@@ -143,13 +155,17 @@ class YuE2Adapter:
                 return chosen
             except (ValueError, UnicodeError) as error:
                 entry["error"] = str(error)
+                entry.update(getattr(error, "diagnostics", {}))
                 report["planning_attempts"].append(entry)
-        error = ScoreError(failure + " " + report["planning_attempts"][-1]["error"])
+        attempts = report["planning_attempts"]
+        length_attempts = [item for item in attempts if "minimum_duration_s" in item]
+        best_attempt = min(length_attempts, key=lambda item: item["minimum_duration_s"]) if length_attempts else attempts[-1]
+        error = ScoreError(failure + " " + best_attempt["error"])
         error.diagnostics = {"generation": report, "artifacts": artifacts}
         raise error
 
     def generate(self, params, run, progress=None):
-        from .yue2_score import inspect, fit, mute_vocals, ScoreError
+        from .yue2_score import inspect, fit, mute_vocals, retime, ScoreError
         p = self.normalize(params)
         request = self.request(p)
         report = {"target_duration_s": p.target_duration_s,
@@ -164,7 +180,22 @@ class YuE2Adapter:
                 report["planning"] = {"planned_duration_s": round(score.duration_s, 2), "source": "supplied"}
                 chosen = p.abc
             else:
-                chosen = self._plan(request, p, run, progress, report, artifacts, lambda text: fit(mute_vocals(text) if p.instrumental else text, p.target_duration_s),
+                requested_bpm = self._requested_bpm(p.style)
+
+                def accept_generated_score(text):
+                    planned_bpm = inspect(text).bpm
+                    planned_duration_s = round(inspect(text).duration_s, 2)
+                    if requested_bpm is not None:
+                        text, _ = retime(text, requested_bpm)
+                    fitted, info = fit(mute_vocals(text) if p.instrumental else text, p.target_duration_s)
+                    if requested_bpm is not None:
+                        info.update({"planner_bpm": planned_bpm,
+                                     "planner_duration_s": planned_duration_s,
+                                     "requested_bpm": requested_bpm,
+                                     "tempo_adjusted_to_match_style": planned_bpm != requested_bpm})
+                    return fitted, info
+
+                chosen = self._plan(request, p, run, progress, report, artifacts, accept_generated_score,
                                     "No complete arrangement fits the requested duration after three plans.")
             if p.instrumental:
                 chosen = mute_vocals(chosen)

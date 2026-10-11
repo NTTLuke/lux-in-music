@@ -166,6 +166,12 @@ adapter-provided generation diagnostics and failed reports. Existing profiles
 receive current adapter capabilities without changing their saved file/runtime
 validation. Queued/song snapshots remain immutable.
 
+For generated YuE2 scores, fitting respects the requested target and never
+discards vocal bars to force a fit. When the style contains one unambiguous BPM
+target, apply it to the generated score before fitting and record both the
+planner tempo and requested tempo. If all planner seeds still require too much
+vocal time, report the shortest measured requirement and its tempo.
+
 The YuE2 cap still means a cap. Target mode only renders an EOS stream near the
 target; clip mode preserves and labels forced truncation. Forced-stream rendering
 metadata is separate from composing-stage EOS. Completion needs listening too;

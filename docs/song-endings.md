@@ -26,14 +26,19 @@ Having `[Outro]` in the lyrics did not make a 5-minute composition fit in 3 minu
 - The adapter requests only the score, checks its bar durations, meter and tempo,
   and fits generated arrangements by shortening instrumental passages. It keeps
   all vocal bars, adjacent breathing rests, tempo, first two bars and final four
-  bars. It removes complete instrumental phrases without severing boundary ties.
+  bars. If the style gives one unambiguous BPM target, generated scores are
+  retimed to that requested tempo before fitting; supplied scores stay unchanged.
+  It removes complete instrumental phrases without severing boundary ties.
 - Scores use the native two-voice format and groups of up to four measures.
   Unsupported notation, changed meter/key fields and malformed bars are rejected
   rather than assigned guessed durations. Supplied scores are inspected and
   retained exactly; the user must edit an overlong supplied score.
 - If a generated plan cannot fit safely, try up to three planner seeds
   (`requested seed`, `seed+1`, `seed+2`, modulo 2^63). Failure explains the needed
-  length or asks for shorter verses/repeated choruses. Lyrics are never deleted.
+  length from the shortest viable plan, including its tempo, or asks for shorter
+  verses/repeated choruses. Lyrics are never deleted. Score fitting uses the
+  requested target; the separate semantic completion allowance applies only
+  after the planner returns a score within that target.
 - The hard audio limit defaults to target plus the larger of 15 seconds or
   12.5%, capped at 360 seconds. Targets are 30–330 seconds. These are application
   limits and finishing allowance, not a universal minimum for music or a promise

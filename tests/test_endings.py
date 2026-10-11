@@ -99,6 +99,59 @@ class EndingGenerationTests(unittest.TestCase):
         self.assertEqual(result["generation"]["render_artifact_meta"]["semantic"]["truncated"], "true")
         self.assertEqual(base64.b64decode(result["artifacts"][0]["payload"]).decode(), score())
 
+    def test_explicit_style_tempo_retimes_generated_score_before_fitting(self):
+        # Use synthetic text; private user prompts do not belong in repository tests.
+        planned = score(["C16"] * 94, tempo=73, unit=32, meter="2/4")
+        calls = []
+
+        def run(request):
+            calls.append(copy.deepcopy(request))
+            if request["options"].get("stop_after") == "abc":
+                return {"artifacts": [artifact(planned)]}
+            semantic = artifact(json.dumps([1] * 2820), "false", "semantic")
+            if request["options"].get("stop_after") == "semantic":
+                return {"artifacts": [semantic]}
+            return {"audio": tiny_audio(), "artifacts": [semantic]}
+
+        lyrics = "Synthetic verse\nSynthetic chorus\nSynthetic ending"
+        style = "Hip hop, melodic rap, 100 BPM, guitar"
+        params = GenerationParams(lyrics=lyrics, style=style,
+                                 cot="full", seed=1234, target_duration_s=120)
+        result = YuE2Adapter().generate(params, run)
+        self.assertEqual(len(calls), 3)  # plan, compose with EOS, render
+        self.assertEqual(calls[0]["lyrics"], lyrics)
+        self.assertEqual(calls[0]["options"]["style"], style)
+        checked_score = inspect(calls[1]["options"]["abc"])
+        self.assertEqual(checked_score.duration_s, 112.8)
+        self.assertEqual(checked_score.bpm, 100)
+        self.assertEqual(result["generation"]["target_duration_s"], 120)
+        self.assertEqual(result["generation"]["duration_s"], 112.8)
+        self.assertTrue(result["generation"]["target_match"])
+        self.assertEqual(result["generation"]["status"], "model_end")
+        self.assertEqual(result["generation"]["planning"]["planner_bpm"], 73)
+        self.assertEqual(result["generation"]["planning"]["requested_bpm"], 100)
+        self.assertTrue(result["generation"]["planning"]["tempo_adjusted_to_match_style"])
+
+    def test_style_tempo_override_requires_one_unambiguous_bpm(self):
+        self.assertEqual(YuE2Adapter._requested_bpm("indie, 100 BPM, bright guitars"), 100)
+        self.assertIsNone(YuE2Adapter._requested_bpm("100-110 BPM, electronic"))
+        self.assertIsNone(YuE2Adapter._requested_bpm("90 BPM then 120 BPM"))
+
+    def test_unfittable_plan_error_reports_the_shortest_attempt(self):
+        plans = [score(["C16"] * bars, tempo=100) for bars in (57, 70, 80)]
+        calls = []
+
+        def run(request):
+            calls.append(copy.deepcopy(request))
+            return {"artifacts": [artifact(plans[len(calls) - 1])]} \
+                if request["options"].get("stop_after") == "abc" else {"artifacts": []}
+
+        with self.assertRaisesRegex(ScoreError, "about 137s at 100 BPM") as caught:
+            YuE2Adapter().generate(self.params(target_duration_s=120, seed=10), run)
+        attempts = caught.exception.diagnostics["generation"]["planning_attempts"]
+        self.assertEqual([a["minimum_duration_s"] for a in attempts], [136.8, 168, 192])
+        self.assertEqual(len(caught.exception.diagnostics["artifacts"]), 3)
+
     def test_invalid_or_truncated_plans_retry_without_audio_then_fail(self):
         for art in [artifact(score(), "true"), artifact(score().replace("C16|", "C15|")),
                     artifact(score(["C16"] * 30))]:
