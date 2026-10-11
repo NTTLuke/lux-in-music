@@ -38,14 +38,16 @@
       "description": "Run studio.sh on a fresh checkout to prepare software and open the studio without weights.",
       "status": "implemented",
       "tests": [
-        "tests.test_setup.BootstrapTests"
+        "tests.test_setup.BootstrapTests",
+        "tests.test_app.LaunchHostTests"
       ],
       "acceptance": [
         "Install missing uv locally, prepare Python and locked dependencies, and build the pinned native runtime.",
         "Show software installation stages and native build progress before opening the UI.",
         "Install no generation or separation model weights.",
         "Repeat startup reuses a compatible build.",
-        "Missing system compiler prerequisites produce an actionable message."
+        "Missing system compiler prerequisites produce an actionable message.",
+        "The UI listens on 127.0.0.1 unless --host is given, and warns that the studio has no login when it listens elsewhere."
       ]
     },
     {

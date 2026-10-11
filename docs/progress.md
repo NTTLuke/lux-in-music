@@ -1,5 +1,21 @@
 # Project handoff
 
+## Current work: choose the listening address
+
+- `./studio.sh --host <address>` (and `python -m studio.launch --host`) sets the
+  address the UI listens on. The default stays `127.0.0.1`. Any other address
+  prints a warning that the studio has no login. With `0.0.0.0` the printed and
+  opened address is `127.0.0.1`. audio.cpp engines still listen on `127.0.0.1`.
+- README explains the risk, suggests a trusted LAN or Tailscale address, and an
+  SSH tunnel for private remote use.
+- Verification: launch test (default, `0.0.0.0`, IPv4 and IPv6 addresses, warning),
+  now part of the full checks through the bootstrap requirement. Real run on this
+  Mac: with `--host 0.0.0.0` the API answered on the LAN address; with the default
+  the LAN address refused connections. A manual test with `./studio.sh --host`
+  also worked.
+- Limits: no login or HTTPS. Do not use `0.0.0.0` on untrusted networks.
+- Next step: add authentication only if the studio is shared with other people.
+
 ## Current work: complete songs shorter than the target
 
 - Observed: three target-mode jobs failed with "did not finish near the requested
