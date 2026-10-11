@@ -69,7 +69,8 @@ def health() -> dict:
             "setup_required": status["setup_required"]}
 
 
-def generate(params: GenerationParams, name: str | None = None, profile: dict | None = None, progress=None) -> GenerationResult:
+def generate(params: GenerationParams, name: str | None = None, profile: dict | None = None, progress=None,
+             cancel=None) -> GenerationResult:
     profile = get_manager().snapshot(profile)
     provider = get_provider(profile)
     adapter = provider.adapter(profile)
@@ -81,9 +82,9 @@ def generate(params: GenerationParams, name: str | None = None, profile: dict | 
     try:
         if hasattr(adapter, "generate"):
             kwargs = {"progress": progress} if progress else {}
-            data = adapter.generate(params, lambda request: provider.run(profile, request), **kwargs)
+            data = adapter.generate(params, lambda request: provider.run(profile, request, cancel), **kwargs)
         else:
-            data = provider.run(profile, adapter.request(params))
+            data = provider.run(profile, adapter.request(params), cancel)
     except Exception as error:
         if hasattr(error, "diagnostics"):
             (OUTPUT_DIR / f"{stem}.failure-report").write_text(json.dumps({

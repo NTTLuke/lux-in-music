@@ -445,7 +445,7 @@ function endingBadge(song) {
 function render() {
   const q = $("search").value.trim().toLowerCase();
   const rank = { running: 0, queued: 1, error: 2 };
-  const active = state.jobs.filter((j) => j.status !== "done" && (j.kind || "generate") === "generate")
+  const active = state.jobs.filter((j) => !["done", "cancelled"].includes(j.status) && (j.kind || "generate") === "generate")
     .sort((a, b) => rank[a.status] - rank[b.status] || a.created - b.created);
   const songs = state.library.filter((s) => !q || [s.title, s.params.style, s.params.lyrics].join(" ").toLowerCase().includes(q));
   $("lib-count").textContent = state.library.length;
@@ -472,6 +472,7 @@ function render() {
           <div class="s-tags">${tagsHtml(j.params.style)}</div>
           <div class="s-sub ${running ? "shimmer" : ""}" data-elapsed>${running ? esc(j.stage || "Generating…") : "Waiting in queue"}</div>
           <div class="progress"><i data-bar style="width:0"></i></div></div>
+        <div class="s-actions" style="opacity:1"><button class="icon-btn" data-act="cancel" title="${running ? "Stop generation" : "Remove from queue"}"><svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1"/></svg></button></div>
       </div>`;
   }).join("");
   const songRows = songs.map((s) => `
@@ -506,6 +507,7 @@ $("list").onclick = async (e) => {
   const act = e.target.closest("[data-act]")?.dataset.act;
   if (row.dataset.job) {
     if (act === "dismiss") { await fetch(`/api/jobs/${row.dataset.job}`, { method: "DELETE" }); pollJobs(); }
+    if (act === "cancel") { await fetch(`/api/jobs/${row.dataset.job}/cancel`, { method: "POST" }); pollJobs(); }
     return;
   }
   if (e.target.closest("a")) return;

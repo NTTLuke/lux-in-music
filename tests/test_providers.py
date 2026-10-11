@@ -3,12 +3,13 @@
 import base64
 import io
 import tempfile
+import threading
 import unittest
 import wave
 from pathlib import Path
 from unittest.mock import patch
 
-from studio.models import ModelManager
+from studio.models import Cancelled, ModelManager
 from studio.providers import AudioCppProvider
 from tests.test_models import tiny_audio
 
@@ -45,3 +46,12 @@ class NativeProbeTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "input audio format"):
                 provider.probe({"task": "sep", "family": "unconfigured"})
             run.assert_not_called()
+
+    def test_cancel_while_engine_starts_skips_inference(self):
+        provider = AudioCppProvider()
+        cancel = threading.Event()
+        with patch.object(provider, "_start", side_effect=lambda profile: cancel.set()), \
+                patch("studio.providers.httpx.post") as post:
+            with self.assertRaises(Cancelled):
+                provider.run({}, {}, cancel)
+        post.assert_not_called()

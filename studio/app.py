@@ -45,6 +45,8 @@ async def _no_cache_ui(request, call_next):
 
 jobs: dict[str, dict] = {}
 _queue: queue.Queue[str] = queue.Queue()
+_jobs_lock = threading.Lock()  # queued -> running/cancelled transitions
+_cancels: dict[str, threading.Event] = {}  # running job id -> stop request
 # Seconds of compute per second of audio, learned from finished jobs (M4 Max, warm model ~0.45).
 _speed = {"ratio": 0.5, "overhead": 8.0}
 
@@ -76,10 +78,12 @@ def _worker() -> None:
     # audio.cpp runs one generation at a time per model, so a single worker is enough.
     while True:
         job_id = _queue.get()
-        job = jobs.get(job_id)
-        if job is None:
-            continue
-        job.update(status="running", started=time.time(), eta_s=_estimate(job))
+        with _jobs_lock:
+            job = jobs.get(job_id)
+            if job is None or job["status"] != "queued":
+                continue
+            cancel = _cancels[job_id] = threading.Event()
+            job.update(status="running", started=time.time(), eta_s=_estimate(job))
         try:
             if job["kind"] == "stemedit":
                 p = job["params"]
@@ -95,15 +99,21 @@ def _worker() -> None:
                 _sep_speed[p["mode"]] = res["elapsed_s"] / max(1.0, _song_duration(p["song"]))
                 continue
             res = engine.generate(GenerationParams(**job["params"]), profile=job["profile"],
-                                  progress=lambda stage: job.update(stage=stage))
+                                  progress=lambda stage: cancel.is_set() or job.update(stage=stage),
+                                  cancel=cancel)
             job.update(status="done", result=json.loads(res.meta_path.read_text()))
             if res.duration_s > 5:
                 r = max(0.1, (res.elapsed_s - _speed["overhead"]) / res.duration_s)
                 _speed["ratio"] = 0.7 * _speed["ratio"] + 0.3 * r
         except Exception as e:
-            job.update(status="error", error=str(e))
+            if cancel.is_set():
+                job.update(status="cancelled")
+            else:
+                job.update(status="error", error=str(e))
         finally:
             job["finished"] = time.time()
+            with _jobs_lock:
+                _cancels.pop(job_id, None)
 
 
 threading.Thread(target=_worker, daemon=True).start()
@@ -183,6 +193,24 @@ def api_jobs():
     now = time.time()
     out = sorted(jobs.values(), key=lambda j: j["created"], reverse=True)
     return [{**j, "now": now} for j in out]
+
+
+@app.post("/api/jobs/{job_id}/cancel")
+def api_cancel_job(job_id: str):
+    with _jobs_lock:
+        job = jobs.get(job_id)
+        if job is None:
+            raise HTTPException(404)
+        if job["status"] == "queued":
+            job.update(status="cancelled", finished=time.time())
+        elif job["status"] == "running" and job["kind"] == "generate" and job_id in _cancels:
+            # ponytail: generation only; separation/stem edits run several steps that do not check cancel yet.
+            _cancels[job_id].set()
+            job["stage"] = "Stopping…"
+            get_provider(job["profile"]).cancel(job["profile"])
+        else:
+            raise HTTPException(409, f"job is {job['status']}")
+    return job
 
 
 @app.delete("/api/jobs/{job_id}")

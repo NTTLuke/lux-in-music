@@ -1,5 +1,23 @@
 # Project handoff
 
+## Current work: stop a generation
+
+- `POST /api/jobs/{id}/cancel` removes a queued job of any kind, or stops a
+  running generation. Job cards show a stop button; cancelled jobs leave the list.
+- audio.cpp has no request cancellation, so `AudioCppProvider.cancel` terminates
+  the generation engine. The worker marks the job `cancelled`, not `error`, and
+  no song or failure report is written. Steps of a multi-step YuE2 generation
+  check the stop request before each engine call, also after an engine restart.
+- Verification: offline API test with a blocking fake provider (queued and
+  running jobs, no output written), a provider test for a stop during engine
+  start, and a browser check for the stop button. Full checks pass. A real
+  audio.cpp generation was stopped in `./studio.sh` on macOS (Metal) 5 s after
+  it started; it ended `cancelled` with no output, and the next generation
+  restarted the engine and finished a song (about 3 minutes).
+- Limits: the next job pays the model load again. Running separation and stem edits cannot be stopped yet;
+  they run several engine calls that do not check the stop request.
+- Next step: allow stopping running separations and stem edits.
+
 ## Current work: manual release build
 
 Branch: `feat/manual-release-build`, based on main after PR #9.
