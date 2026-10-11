@@ -138,7 +138,9 @@
       "issue": "https://github.com/NTTLuke/lux-in-music/issues/1",
       "description": "Guide song structure by duration and report forced truncation accurately.",
       "status": "implemented",
-      "tests": ["tests.test_endings"],
+      "tests": [
+        "tests.test_endings"
+      ],
       "acceptance": [
         "Keep a maximum-duration cap distinct from a composition target.",
         "Retain semantic and score truncation flags.",
@@ -151,7 +153,9 @@
       "issue": "https://github.com/NTTLuke/lux-in-music/issues/18",
       "description": "Honor an explicit style BPM and report the best plan when Complete Arrangement cannot fit all lyrics.",
       "status": "implemented",
-      "tests": ["tests.test_endings.EndingGenerationTests"],
+      "tests": [
+        "tests.test_endings.EndingGenerationTests"
+      ],
       "acceptance": [
         "A single explicit BPM in the style is applied to the generated score before fitting, with every vocal bar preserved.",
         "When every score is too long, diagnostics report the shortest measured duration and tempo among planner attempts.",
@@ -163,12 +167,29 @@
       "issue": "https://github.com/NTTLuke/lux-in-music/issues/18",
       "description": "Explain arrangement analysis and help the user review a duration before creating audio.",
       "status": "implemented",
-      "tests": ["tests.test_endings.DurationAnalysisTests", "tests.test_endings.DurationAnalysisApiTests"],
+      "tests": [
+        "tests.test_endings.DurationAnalysisTests",
+        "tests.test_endings.DurationAnalysisApiTests"
+      ],
       "acceptance": [
         "Analysis prepares a checked score without creating audio and reports its nominal duration and BPM.",
         "Short targets return a usable duration suggestion; over-limit and invalid plans are reported without a false estimate.",
         "Generation reuses the checked plan and refuses changed inputs, model profiles and expired analysis IDs.",
         "Fresh installs and unsupported providers cannot start analysis; running analysis can be cancelled without a song."
+      ]
+    },
+    {
+      "id": "manual-actions-release",
+      "issue": "https://github.com/NTTLuke/lux-in-music/issues/22",
+      "description": "Start the shared versioned release process manually from main in GitHub Actions.",
+      "status": "implemented",
+      "tests": [
+        "tests.test_release_ci.ReleaseInputTests"
+      ],
+      "acceptance": [
+        "Preview invokes the shared release script with full checks and no publication.",
+        "Publication uses the same script with a validated version and full checks.",
+        "Non-main refs, automatic events, invalid inputs and downgrades cannot start a release."
       ]
     }
   ]

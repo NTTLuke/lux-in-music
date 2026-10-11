@@ -284,7 +284,15 @@ Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Any co
 CLI can use the shared instructions and run `python3 scripts/check.py`. See
 [the harness guide](docs/harness.md) for application checks and CLI compatibility.
 
-Releases are built from `main` with `./release.sh patch` — or `minor`, `major`, an
+Maintainers can build a version from GitHub: open
+[Actions → Release](https://github.com/NTTLuke/lux-in-music/actions/workflows/release.yml),
+click **Run workflow**, select **main**, and choose patch/minor/major. Leave
+**Preview only** checked to run the tests and see the release plan. Uncheck it
+on a second run to publish the version and downloadable files. No models are
+downloaded. See [the release guide](CONTRIBUTING.md#release) for exact versions
+and recovery instructions.
+
+Local releases are built from `main` with `./release.sh patch` — or `minor`, `major`, an
 explicit version such as `0.2.0`, and `--dry-run` to preview. In one run it checks
 the repository, writes the version, `CHANGELOG.md` and the README release block,
 then tags, builds and publishes the downloadable files. Add `--full-checks` to
