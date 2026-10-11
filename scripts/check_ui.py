@@ -179,6 +179,8 @@ def main():
                     assert body["model_options"]["cot"] == "full", body
                     page.evaluate("state.library[0].generation = {status:'truncated', message:'Stopped at the hard limit. The song may be unfinished.'}; render()")
                     expect(page.locator(".badge").filter(has_text="Unfinished · limit reached")).to_be_visible()
+                    page.evaluate("state.library[0].generation = {status:'model_end', shorter_than_target:true, target_duration_s:330}; state.library[0].duration_s = 229; render()")
+                    expect(page.locator(".badge").filter(has_text="Shorter than target · 3:49 of 5:30")).to_be_visible()
                     page.screenshot(path=str(args.artifacts / "duration-desktop.png"))
                     page.locator(".song[data-name='legacy-song'] [data-act='info']").click()
                     for fmt, media in {"flac": "audio/flac", "mp3": "audio/mpeg"}.items():
@@ -214,7 +216,7 @@ def main():
                     browser.close()
                 print(json.dumps({"settings_first": True, "license_gate": True, "independent_precision": True,
                                   "fake_download_and_activation": True, "capability_controls": True,
-                                  "generation_and_library": True, "five_templates_without_generation": True, "templates_share_techno_lyrics": True, "templates_preserve_title_and_settings": True, "wider_create_and_responsive_layout": True, "duration_target_and_cap": True, "lyric_advice_and_truncation_badge": True, "mobile_navigation": True, "external_without_weights": True, "verification_survives_reload_and_dropdown": True, "separator_disabled_when_active": True, "card_progress_and_errors_only": True, "flac_and_mp3_downloads": True, "generation_stop_button": True, "creator_terms_visible": True, "mixer_editable_and_legacy_songs": True, "unresolved_license_blocked": True, "javascript_errors": errors}))
+                                  "generation_and_library": True, "five_templates_without_generation": True, "templates_share_techno_lyrics": True, "templates_preserve_title_and_settings": True, "wider_create_and_responsive_layout": True, "duration_target_and_cap": True, "lyric_advice_and_truncation_badge": True, "shorter_than_target_badge": True, "mobile_navigation": True, "external_without_weights": True, "verification_survives_reload_and_dropdown": True, "separator_disabled_when_active": True, "card_progress_and_errors_only": True, "flac_and_mp3_downloads": True, "generation_stop_button": True, "creator_terms_visible": True, "mixer_editable_and_legacy_songs": True, "unresolved_license_blocked": True, "javascript_errors": errors}))
             finally:
                 server.terminate()
                 try: server.wait(timeout=10)

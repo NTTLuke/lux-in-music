@@ -439,7 +439,9 @@ function tagsHtml(style) { return style.split(",").map((t) => t.trim()).filter(B
 function cotBadge(cot) { return cot === "off" ? "" : `<span class="badge grad">${cot === "full" ? "score" : "melody"}</span>`; }
 function endingBadge(song) {
   const status = song.generation?.status || (String(song.artifact_meta?.semantic?.truncated) === "true" ? "truncated" : "unknown");
-  return status === "truncated" ? '<span class="badge">Unfinished · limit reached</span>' : status === "model_end" ? '<span class="badge">Model ended</span>' : "";
+  const g = song.generation || {};
+  const shorter = g.shorter_than_target ? `<span class="badge">Shorter than target · ${fmt(song.duration_s)} of ${fmt(g.target_duration_s)}</span>` : "";
+  return shorter + (status === "truncated" ? '<span class="badge">Unfinished · limit reached</span>' : status === "model_end" ? '<span class="badge">Model ended</span>' : "");
 }
 
 function render() {

@@ -138,6 +138,28 @@ class EndingGenerationTests(unittest.TestCase):
             self.assertTrue(all(c["options"]["stop_after"] == "semantic" for c in calls))
             self.assertEqual(len(caught.exception.diagnostics["generation"]["semantic_attempts"]), 2)
 
+    def test_complete_song_shorter_than_target_follows_its_plan(self):
+        # A 20 s plan for a 60 s target: the model ends near the plan, not the target.
+        options = {"abc": score(["C16"] * 10), "cot": "full"}
+        for frames, accepted in [(500, True), (450, True), (100, False)]:
+            calls = []
+            def run(request):
+                calls.append(copy.deepcopy(request))
+                return {"audio": tiny_audio(), "artifacts": [artifact(json.dumps([1] * frames), ident="semantic")]}
+            with self.subTest(seconds=frames / 25):
+                if not accepted:
+                    with self.assertRaisesRegex(ScoreError, "did not finish"):
+                        YuE2Adapter().generate(self.params(target_duration_s=60, model_options=options), run)
+                    self.assertEqual(len(calls), 2)
+                    continue
+                result = YuE2Adapter().generate(self.params(target_duration_s=60, model_options=options), run)
+                self.assertEqual(len(calls), 2)  # accepted at the first composing attempt, then rendered
+                report = result["generation"]
+                self.assertTrue(report["shorter_than_target"])
+                self.assertFalse(report["target_match"])
+                self.assertEqual(report["status"], "model_end")
+                self.assertIn("shorter than the 60s target", report["message"])
+
     def test_semantic_retry_seed_and_progress_are_recorded(self):
         calls, progress = [], []
         def run(request):

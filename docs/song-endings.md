@@ -39,7 +39,11 @@ Having `[Outro]` in the lyrics did not make a 5-minute composition fit in 3 minu
   limits and finishing allowance, not a universal minimum for music or a promise
   of sample-exact duration. The CLI can supply a separate explicit hard limit.
 - Compose semantic tokens before acoustic rendering. Require observed EOS and
-  duration within the larger of 15 seconds or 12.5% of the target. Try at most
+  duration within the larger of 15 seconds or 12.5% of the target. Planning only
+  shortens, so lyrics that plan shorter than the target give a shorter song: a
+  complete stream within the same allowance of the planned duration is accepted,
+  labelled **Shorter than target** and explained in the song message. An ending far
+  before the plan is still rejected because sections were dropped. Try at most
   two semantic seeds (`seed`, `seed+1`). If both fail, save a failure report with
   every plan/token attempt and render no unfinished song in this mode.
 - Render the accepted full token stream using `semantic_prefix` and equal token
