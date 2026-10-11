@@ -10,6 +10,11 @@
 - GitHub CLI is downloaded temporarily from its official release with its archive
   checksum verified; authentication uses the existing GitHub access. No model or
   song files are included, and no private lyrics or prompts enter release notes.
+- Published [v0.3.0](https://github.com/NTTLuke/lux-in-music/releases/tag/v0.3.0)
+  from commit `7ee7164`. Baseline and full checks passed before and after the
+  version bump. All four release assets are present; the three package digests
+  match their local SHA-256 values. Archive checks found no runtime/model/song
+  directories or known private-prompt markers. Main is synchronized with origin.
 
 ## Current work: review a duration estimate before creating audio
 
@@ -48,8 +53,8 @@ Branch: `feat/duration-analysis`, related to issue #18.
   analysis/review/create steps, duration modes and suggested actions without
   including lyric text or style prompts. It distinguishes main from v0.2.0,
   which predates this feature. Final documentation baseline checks passed.
-  Next step: include this feature in the next numbered release; listening
-  acceptance for the synthetic smoke-test WAV remains pending.
+  The feature is included in v0.3.0. Next step: listening acceptance for the
+  synthetic smoke-test WAV, which remains pending.
 
 ## Current work: Complete Arrangement rejects a near-target vocal plan
 
