@@ -15,29 +15,9 @@ Press Play and enable sound to hear the original ending.
 
 https://github.com/user-attachments/assets/51a82812-f433-4d41-804c-e34d2c7c23a7
 
-[Download](#releases-and-changelog) · [Install on a Mac](#install-on-a-mac) ·
+[Install on a Mac](#install-on-a-mac) ·
 [Open it again](#open-it-again-and-stop-it) · [Get help](#if-something-goes-wrong) ·
 [Technical reference](#technical-reference)
-
-## Releases and changelog
-
-Lux In Music is published as numbered [releases](https://github.com/NTTLuke/lux-in-music/releases).
-Download the ZIP of the latest release, extract it, and continue with the
-installation steps below: installing and launching are the same.
-
-Every release lists what changed, in new features and fixes, on its release page
-and in [CHANGELOG.md](CHANGELOG.md). Use the ZIP from a release when you want a
-known version instead of the newest source.
-
-<!-- release:start -->
-**Latest release: [v0.3.1](https://github.com/NTTLuke/lux-in-music/releases/tag/v0.3.1)** · 11 October 2026
-
-- **Download (recommended):** [`lux-in-music-v0.3.1.zip`](https://github.com/NTTLuke/lux-in-music/releases/download/v0.3.1/lux-in-music-v0.3.1.zip) — the app source, ready to extract
-- Also attached: `lux_in_music-0.3.1-py3-none-any.whl`, `lux_in_music-0.3.1.tar.gz`, `SHA256SUMS.txt`
-- [Release notes](https://github.com/NTTLuke/lux-in-music/releases/tag/v0.3.1) · [All releases](https://github.com/NTTLuke/lux-in-music/releases) · [CHANGELOG.md](CHANGELOG.md)
-
-This release includes 1 new feature, 2 documentation updates and 2 other changes. See [CHANGELOG.md](CHANGELOG.md) for the full list.
-<!-- release:end -->
 
 ## Install on a Mac
 
@@ -143,8 +123,8 @@ for commercial use. Licenses are shown before each download.
 
 ### 5. Create your first song
 
-Lux infers song length during generation. The published **v0.3.0** still has the
-earlier review step; this one-step flow is in the current development branch.
+Lux infers song length during generation. The current release includes this
+one-step flow: Lux analyzes the lyrics, style and tempo as part of generation.
 
 1. Click **Create** in the sidebar.
 2. Click **Demo · Melodic Techno** to load example lyrics and style. To try a
@@ -267,10 +247,11 @@ downloaded. See [the release guide](CONTRIBUTING.md#release) for exact versions
 and recovery instructions.
 
 Local releases are built from `main` with `./release.sh patch` — or `minor`, `major`, an
-explicit version such as `0.2.0`, and `--dry-run` to preview. In one run it checks
-the repository, writes the version, `CHANGELOG.md` and the README release block,
-then tags, builds and publishes the downloadable files. Add `--full-checks` to
-also run the application tests before publishing.
+explicit version such as `0.2.0`, and `--dry-run` to preview. The script checks
+the repository, builds versioned artifacts from a temporary copy, then creates
+a release tag and publishes the downloadable files. It leaves `main`, README
+and `CHANGELOG.md` unchanged. Add `--full-checks` to also run the application
+tests before publishing.
 
 The [architecture contract](docs/architecture.md) explains provider/model adapters,
 Settings, independent precision choices, and profile records. Track acceptance
