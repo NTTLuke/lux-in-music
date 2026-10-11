@@ -17,6 +17,7 @@ commits on `main`. Each release also appears on the
 
 ### Fixed
 
+- Keep the lock file in step with the released version ([#16](https://github.com/NTTLuke/lux-in-music/pull/16))
 - Create the artifact ignore rule before the release guard ([#15](https://github.com/NTTLuke/lux-in-music/pull/15))
 - Accept complete songs that are shorter than the target ([#13](https://github.com/NTTLuke/lux-in-music/pull/13))
 
