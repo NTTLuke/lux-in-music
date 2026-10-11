@@ -6,6 +6,16 @@
   model download integrity, dependency advisories and GitHub metadata. Detailed
   findings and private-history identifiers stay in a local maintainer report,
   outside Git. No confidential song content is added to this review.
+- The fresh mirror contained 500 advertised Git objects, with no exact match for
+  the known historical private inputs. All nine package archives across v0.1.0,
+  v0.2.0 and v0.3.0 passed the same check and contained no runtime/model/song data;
+  their available SHA-256 manifests matched. Archive secret-scan findings were
+  copies of the documented WAV checksum described below.
+- Checked 23 issue/PR bodies and three comments plus their retained edits, and
+  90 accessible Actions logs against known private text. Current bodies/comments
+  and logs passed this limited content check; retained-history findings require
+  cleanup. No Actions artifacts were retained at the time of review. Details
+  stay outside Git; this does not certify unknown sensitive text or attachments.
 - Gitleaks 8.30.1 (official checksum verified) reports one finding in historical
   progress notes: a documented WAV SHA-256, not an authentication credential.
   The Python advisory audit reports no known vulnerabilities in the 22 installed
