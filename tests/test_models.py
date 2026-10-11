@@ -417,6 +417,34 @@ class SettingsApiTests(ModelFixtures):
         self.assertEqual(self.request("POST", f"/api/jobs/{running['id']}/cancel").status_code, 409)
         self.assertEqual(list(engine.OUTPUT_DIR.iterdir()), [])
 
+    def test_songs_export_as_flac_and_mp3_without_changing_the_wav(self):
+        import numpy as np, soundfile as sf
+        from studio.audio import wave_bytes
+        tone = np.sin(np.arange(48000) * 2 * np.pi * 440 / 48000)[:, None] * [0.5, 0.25]
+        wav = engine.OUTPUT_DIR / "song.wav"
+        wav.write_bytes(wave_bytes(tone.astype(np.float32), 48000))
+        original = sf.read(wav, dtype="int16")[0]
+        for fmt, media in {"flac": "audio/flac", "mp3": "audio/mpeg"}.items():
+            with self.subTest(format=fmt):
+                response = self.request("GET", f"/api/export/song?format={fmt}")
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.headers["content-type"], media)
+                self.assertIn(f'filename="song.{fmt}"', response.headers["content-disposition"])
+                data, rate = sf.read(io.BytesIO(response.content), dtype="int16")
+                self.assertEqual((rate, data.shape[1]), (48000, 2))
+                if fmt == "flac":
+                    self.assertTrue(np.array_equal(data, original))
+                else:  # lossy: encoder padding changes the length a little
+                    self.assertLess(abs(len(data) - len(original)), 4800)
+                    # A clean 440 Hz tone keeps its energy near 440 Hz; distortion spreads it.
+                    power = np.abs(np.fft.rfft(data[:, 0].astype(float))) ** 2
+                    tone_band = np.abs(np.fft.rfftfreq(len(data), 1 / 48000) - 440) < 40
+                    self.assertGreater(power[tone_band].sum() / power.sum(), 0.99)
+        self.assertEqual(sf.read(wav, dtype="int16")[0].tolist(), original.tolist())
+        self.assertEqual(sorted(p.name for p in engine.OUTPUT_DIR.iterdir()), ["song.wav"])
+        self.assertEqual(self.request("GET", "/api/export/missing?format=flac").status_code, 404)
+        self.assertEqual(self.request("GET", "/api/export/song?format=ogg").status_code, 422)
+
     def test_license_gate_is_enforced_by_the_api(self):
         profile = self.profile()
         body = {"model_id": "test-model", "precision": "q8_0", "vae_precision": "f16", "license_review_id": profile["license_review_id"]}

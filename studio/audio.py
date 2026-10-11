@@ -4,6 +4,7 @@ import io
 import json
 import wave
 import numpy as np
+import soundfile as sf
 from . import engine
 
 XFADE_S = 0.2
@@ -12,6 +13,19 @@ def pcm(wav_bytes: bytes) -> np.ndarray:
     with wave.open(io.BytesIO(wav_bytes)) as w:
         x = np.frombuffer(w.readframes(w.getnframes()), "<i2").reshape(-1, w.getnchannels())
     return x.astype(np.float32) / 32768.0
+
+
+EXPORT_TYPES = {"flac": "audio/flac", "mp3": "audio/mpeg"}
+
+
+def encode(wav_path, fmt: str) -> bytes:
+    """Lossless FLAC or 320 kbps CBR MP3 copy. The WAV stays the editing source."""
+    # libsndfile's MP3 encoder distorts int16 input; float input matches LAME. FLAC keeps int16 to stay bit-exact.
+    x, sample_rate = sf.read(wav_path, dtype="float32" if fmt == "mp3" else "int16")
+    buf = io.BytesIO()
+    options = {"bitrate_mode": "CONSTANT", "compression_level": 0.0} if fmt == "mp3" else {}
+    sf.write(buf, x, sample_rate, format=fmt.upper(), **options)
+    return buf.getvalue()
 
 
 def wave_bytes(x: np.ndarray, sample_rate: int) -> bytes:

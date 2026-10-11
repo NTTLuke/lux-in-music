@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import time
 import urllib.request
+from urllib.parse import urljoin
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -179,6 +180,13 @@ def main():
                     page.evaluate("state.library[0].generation = {status:'truncated', message:'Stopped at the hard limit. The song may be unfinished.'}; render()")
                     expect(page.locator(".badge").filter(has_text="Unfinished · limit reached")).to_be_visible()
                     page.screenshot(path=str(args.artifacts / "duration-desktop.png"))
+                    page.locator(".song[data-name='legacy-song'] [data-act='info']").click()
+                    for fmt, media in {"flac": "audio/flac", "mp3": "audio/mpeg"}.items():
+                        link = page.locator(f"#drawer a[href='/api/export/legacy-song?format={fmt}']")
+                        expect(link).to_have_text(fmt.upper())
+                        exported = page.request.get(urljoin(page.url, link.get_attribute("href")))
+                        assert exported.ok and exported.headers["content-type"] == media and exported.body(), fmt
+                    page.locator("#drawer [data-act='close']").click()
                     page.evaluate("state.jobs = [{id:'held', kind:'generate', status:'running', params:{title:'Held', style:'Piano'}, created:0, started:0, now:0, eta_s:60}]; state.jobsAt = Date.now(); render()")
                     with page.expect_request("**/api/jobs/held/cancel") as stop_request:
                         page.locator(".song[data-job='held'] [data-act='cancel']").click()
@@ -206,7 +214,7 @@ def main():
                     browser.close()
                 print(json.dumps({"settings_first": True, "license_gate": True, "independent_precision": True,
                                   "fake_download_and_activation": True, "capability_controls": True,
-                                  "generation_and_library": True, "five_templates_without_generation": True, "templates_share_techno_lyrics": True, "templates_preserve_title_and_settings": True, "wider_create_and_responsive_layout": True, "duration_target_and_cap": True, "lyric_advice_and_truncation_badge": True, "mobile_navigation": True, "external_without_weights": True, "verification_survives_reload_and_dropdown": True, "separator_disabled_when_active": True, "card_progress_and_errors_only": True, "generation_stop_button": True, "creator_terms_visible": True, "mixer_editable_and_legacy_songs": True, "unresolved_license_blocked": True, "javascript_errors": errors}))
+                                  "generation_and_library": True, "five_templates_without_generation": True, "templates_share_techno_lyrics": True, "templates_preserve_title_and_settings": True, "wider_create_and_responsive_layout": True, "duration_target_and_cap": True, "lyric_advice_and_truncation_badge": True, "mobile_navigation": True, "external_without_weights": True, "verification_survives_reload_and_dropdown": True, "separator_disabled_when_active": True, "card_progress_and_errors_only": True, "flac_and_mp3_downloads": True, "generation_stop_button": True, "creator_terms_visible": True, "mixer_editable_and_legacy_songs": True, "unresolved_license_blocked": True, "javascript_errors": errors}))
             finally:
                 server.terminate()
                 try: server.wait(timeout=10)

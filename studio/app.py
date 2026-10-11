@@ -12,13 +12,13 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from . import edit, engine, separate
+from . import audio, edit, engine, separate
 from .params import GenerationParams
 from .models import get_manager, SetupRequired
 from .providers import get_provider, close_providers
@@ -333,6 +333,15 @@ def edit_replace_stem(req: StemEditRequest):
                                "mode": base["mode"]}, "profile": profile, "separator_profile": sep_profile}
     _queue.put(job_id)
     return jobs[job_id]
+
+
+@app.get("/api/export/{song}")
+def export_song(song: str, format: Literal["flac", "mp3"]):
+    wav = engine.OUTPUT_DIR / f"{song}.wav"
+    if "/" in song or song.startswith(".") or not wav.exists():
+        raise HTTPException(404)
+    return Response(audio.encode(wav, format), media_type=audio.EXPORT_TYPES[format],
+                    headers={"Content-Disposition": f'attachment; filename="{song}.{format}"'})
 
 
 @app.get("/api/beats/{song}")

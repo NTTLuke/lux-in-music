@@ -1,5 +1,22 @@
 # Project handoff
 
+## Current work: FLAC and MP3 downloads
+
+- The song details drawer offers WAV, FLAC and MP3. `GET /api/export/{song}?format=flac|mp3`
+  converts the WAV on request with `soundfile` (bundled libsndfile 1.2.2; LGPL,
+  dynamically linked). Nothing is written to `outputs/`.
+- FLAC is lossless 16-bit. MP3 is 320 kbps CBR. A 238.7 s, 48 kHz stereo song
+  (44.8 MB WAV) became 24.1 MB FLAC in 0.3 s and 9.5 MB MP3 in 1.9 s on an M5 Max.
+- libsndfile's MP3 encoder distorts int16 input (2.7 dB SNR, +20 to +36 dB noise
+  above 16 kHz on a real song), so MP3 is encoded from float samples. That gives
+  40.7 dB SNR, the same as ffmpeg/LAME at 320 kbps. FLAC stays int16 (bit-exact).
+- Verification: offline API test (FLAC samples identical to the WAV, MP3 rate,
+  channels, length and a clean test tone, WAV unchanged, 404 and 422) and a browser check of the
+  drawer links with real encoding. Full checks pass.
+- Limits: the card and player icons still download WAV. Stems, tags and MP3
+  bitrate choice are not supported.
+- Next step: export stems from Studio Mode through the same endpoint if needed.
+
 ## Current work: stop a generation
 
 - `POST /api/jobs/{id}/cancel` removes a queued job of any kind, or stops a
