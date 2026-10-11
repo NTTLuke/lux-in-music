@@ -7,6 +7,19 @@ Entries are written by `./release.sh` from the merged pull requests and the
 commits on `main`. Each release also appears on the
 [releases page](https://github.com/NTTLuke/lux-in-music/releases).
 
+## [0.2.0] - 2026-10-11
+
+### Added
+
+- Add --host to choose the address the studio listens on ([#14](https://github.com/NTTLuke/lux-in-music/pull/14))
+- Add FLAC and MP3 downloads for songs ([#12](https://github.com/NTTLuke/lux-in-music/pull/12))
+- Add a way to stop a queued or running generation ([#11](https://github.com/NTTLuke/lux-in-music/pull/11))
+
+### Fixed
+
+- Create the artifact ignore rule before the release guard ([#15](https://github.com/NTTLuke/lux-in-music/pull/15))
+- Accept complete songs that are shorter than the target ([#13](https://github.com/NTTLuke/lux-in-music/pull/13))
+
 ## [0.1.0] - 2026-10-11
 
 First published release of Lux In Music.
