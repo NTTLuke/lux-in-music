@@ -12,7 +12,8 @@
   40.7 dB SNR, the same as ffmpeg/LAME at 320 kbps. FLAC stays int16 (bit-exact).
 - Verification: offline API test (FLAC samples identical to the WAV, MP3 rate,
   channels, length and a clean test tone, WAV unchanged, 404 and 422) and a browser check of the
-  drawer links with real encoding. Full checks pass.
+  drawer links with real encoding. Full checks pass. The fixed MP3 passed a
+  listening check in the running studio.
 - Limits: the card and player icons still download WAV. Stems, tags and MP3
   bitrate choice are not supported.
 - Next step: export stems from Studio Mode through the same endpoint if needed.
