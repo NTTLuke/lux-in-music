@@ -649,6 +649,7 @@ async function openDrawer(s) {
         <button class="btn lux-cta" data-act="dlux"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Open in Studio Mode</button>
         <button class="btn" data-act="dreuse"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0114-5.3L20 9M20 4v5h-5"/></svg>Reuse settings</button>
         <a class="btn" href="/outputs/${encodeURIComponent(s.name)}.wav" download><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>WAV</a>
+        ${["flac", "mp3"].map((f) => `<a class="btn" href="/api/export/${encodeURIComponent(s.name)}?format=${f}" download><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>${f.toUpperCase()}</a>`).join("")}
         ${s.artifacts?.score ? `<a class="btn" href="/outputs/${encodeURIComponent(s.artifacts.score)}" download><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/></svg>Score</a>` : ""}
       </div>
       <div class="d-sec"><h4>Lyrics</h4><div class="d-lyrics">${lyr}</div></div>

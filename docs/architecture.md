@@ -172,6 +172,9 @@ metadata is separate from composing-stage EOS. Completion needs listening too;
 the user accepted the recorded example. See [song endings](song-endings.md)
 for the duration limits, arrangement policy, evidence and model limitations.
 
+The WAV written by the engine is the source for playback, editing and stems.
+FLAC and MP3 downloads are derived copies made on request and never stored.
+
 A queued job can be removed and a running generation can be stopped. audio.cpp
 has no request cancellation, so stopping terminates the generation engine; the
 next job restarts it and loads the model again. A stopped job writes no song.
