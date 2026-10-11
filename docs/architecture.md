@@ -166,11 +166,34 @@ adapter-provided generation diagnostics and failed reports. Existing profiles
 receive current adapter capabilities without changing their saved file/runtime
 validation. Queued/song snapshots remain immutable.
 
+For generated YuE2 scores, fitting respects the requested target and never
+discards vocal bars to force a fit. When the style contains one unambiguous BPM
+target, apply it to the generated score before fitting and record both the
+planner tempo and requested tempo. If all planner seeds still require too much
+vocal time, report the shortest measured requirement and its tempo.
+
 The YuE2 cap still means a cap. Target mode only renders an EOS stream near the
 target; clip mode preserves and labels forced truncation. Forced-stream rendering
 metadata is separate from composing-stage EOS. Completion needs listening too;
 the user accepted the recorded example. See [song endings](song-endings.md)
 for the duration limits, arrangement policy, evidence and model limitations.
+
+Models can declare `duration_analysis`. The Create UI offers automatic duration
+by default for these models and a manual complete-song target. Both analyze a
+musical plan before creating audio, explain the processing wait, and present a
+nominal duration, BPM and concrete choices when the target is too short. This
+is an arrangement estimate, not a guarantee of final audio length. Clip mode
+still uses a hard cap without this review step.
+
+Analysis jobs use the existing queue and a captured profile. YuE2 plans and
+checks the score only; no audio is created by analysis. A server-side cache
+holds at most 32 private plans for 30 minutes and is lost on restart. Generation
+checks matching normalized inputs and the active profile before capturing its
+own copy. Title, duration and performance seed may change; lyric/style/model
+changes require new analysis. The adapter fits the retained score to the accepted
+target and records the analysis ID, planner seed and reuse. Variations reuse that
+composition with different performance seeds. Raw plans are excluded from job
+responses; source/adapted scores are stored locally with a generated song.
 
 Lyrics are optional. `instrumental` is a shared song input that providers must
 declare as a capability; the API refuses it otherwise. YuE2 sends upstream's

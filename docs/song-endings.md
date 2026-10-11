@@ -20,20 +20,44 @@ Having `[Outro]` in the lyrics did not make a 5-minute composition fit in 3 minu
 
 ## Current behavior
 
+In the browser, **Automatic duration (recommended)** and **Complete arrangement**
+start with **Analyze duration**. The Create panel explains why model planning
+requires a wait, distinguishes queue time from analysis, and shows an indeterminate
+progress indicator and Cancel analysis. Analysis generates a score, not audio.
+
+The result gives the plan's estimated duration and BPM. It is not a promise of
+exact performance length. If the selected target is too short, **Use suggested
+duration** accepts the recommendation. **Edit lyrics** and **Edit style** help
+the user remove repeated choruses, shorten a verse, or request a compact intro
+and outro, then analyze again. An over-limit or supplied-score result explains
+the relevant choices. **Create** is a separate action after this review.
+
+Creation reuses the analyzed plan. Changes to text, style or model require a new
+analysis; choosing the offered duration does not. Plans remain in local server
+memory for 30 minutes, up to 32 results, and disappear on server restart. The UI
+asks for another analysis when that result is unavailable. Multiple variations
+reuse the same composition with different performance seeds. The CLI can still
+generate a target-mode song in one call using the existing validation path.
+
 - **Complete arrangement** sends `target_duration_s`. YuE2 uses full planning
   when Direct was requested. The browser selects Full score and explains this;
   choosing Direct switches to **Clip / hard limit**.
 - The adapter requests only the score, checks its bar durations, meter and tempo,
   and fits generated arrangements by shortening instrumental passages. It keeps
   all vocal bars, adjacent breathing rests, tempo, first two bars and final four
-  bars. It removes complete instrumental phrases without severing boundary ties.
+  bars. If the style gives one unambiguous BPM target, generated scores are
+  retimed to that requested tempo before fitting; supplied scores stay unchanged.
+  It removes complete instrumental phrases without severing boundary ties.
 - Scores use the native two-voice format and groups of up to four measures.
   Unsupported notation, changed meter/key fields and malformed bars are rejected
   rather than assigned guessed durations. Supplied scores are inspected and
   retained exactly; the user must edit an overlong supplied score.
 - If a generated plan cannot fit safely, try up to three planner seeds
   (`requested seed`, `seed+1`, `seed+2`, modulo 2^63). Failure explains the needed
-  length or asks for shorter verses/repeated choruses. Lyrics are never deleted.
+  length from the shortest viable plan, including its tempo, or asks for shorter
+  verses/repeated choruses. Lyrics are never deleted. Score fitting uses the
+  requested target; the separate semantic completion allowance applies only
+  after the planner returns a score within that target.
 - The hard audio limit defaults to target plus the larger of 15 seconds or
   12.5%, capped at 360 seconds. Targets are 30–330 seconds. These are application
   limits and finishing allowance, not a universal minimum for music or a promise

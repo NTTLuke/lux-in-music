@@ -62,6 +62,9 @@ See the architecture document for current limitations and the target design.
 
 - Use Lux In Music for product names and `lux-in-music` for package identifiers.
 - Keep code, project documentation, issues, and PRs in simple English.
+- Treat user-supplied lyrics and song prompts as private. Never include them in
+  issues, PRs, comments, commits, tests, or shared artifacts. Use synthetic text
+  and describe reproductions by duration, tempo, profile, seed, and ending flags.
 - Issues and PRs need the problem, relevant analysis, proposed/resulting behavior,
   and verification. Separate observed evidence from hypotheses.
 - Use existing Python/FastAPI and plain JavaScript conventions. Add abstractions

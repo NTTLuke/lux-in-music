@@ -134,6 +134,21 @@ def mute_vocals(text):
     return score.text()
 
 
+def retime(text, bpm):
+    """Apply an explicit requested BPM to a generated score, keeping its notes."""
+    if not isinstance(bpm, int) or isinstance(bpm, bool) or not 30 <= bpm <= 300:
+        raise ScoreError("Requested tempo must be between 30 and 300 BPM")
+    score = inspect(text)
+    old_bpm = score.bpm
+    if old_bpm == bpm:
+        return text, old_bpm
+    lines = text.splitlines()
+    lines[4] = f"Q:1/4={bpm}"
+    updated = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+    inspect(updated)
+    return updated, old_bpm
+
+
 def fit(text, target_s):
     score = inspect(text)
     original_s = score.duration_s
@@ -159,9 +174,11 @@ def fit(text, target_s):
                     candidates.append((index, end))
         if not candidates:
             minimum = math.ceil(score.duration_s)
-            raise ScoreError(f"The vocal passages and ending need about {minimum}s at {score.bpm} BPM. "
-                             "Choose a longer duration, shorten verses/repeated choruses, or supply a shorter score. "
-                             "No lyrics have been removed.")
+            error = ScoreError(f"The vocal passages and ending need about {minimum}s at {score.bpm} BPM. "
+                               "Choose a longer duration, shorten verses/repeated choruses, or supply a shorter score. "
+                               "No lyrics have been removed.")
+            error.diagnostics = {"minimum_duration_s": round(score.duration_s, 2), "bpm": score.bpm}
+            raise error
         # Remove a complete instrumental phrase, including any internal ties.
         start, end = max(candidates, key=lambda span: span[1] - span[0])
         del score.bars[start:end]

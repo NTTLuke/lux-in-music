@@ -153,10 +153,12 @@ def main():
                     expect(page.locator("#lx-editbar")).to_contain_text("Editing vocals")
                     # Offer duration planning through a capability response. The
                     # isolated provider still produces only fixture audio.
+                    analysis_capable = False
                     def duration_capability(route):
                         data = route.fetch().json()
                         data["active"]["capabilities"].update(target_duration_s=330, min_target_duration_s=30,
-                            max_duration_s=360, planning=["off", "melody", "full"], instrumental=True)
+                            max_duration_s=360, planning=["off", "melody", "full"], instrumental=True,
+                            duration_analysis=analysis_capable)
                         route.fulfill(json=data)
                     expect(page.locator("#instrumental-toggle")).to_be_hidden()  # the fake provider has no instrumental mode
                     page.route("**/api/settings/status", duration_capability)
@@ -195,6 +197,76 @@ def main():
                     page.evaluate("state.library[0].generation = {status:'model_end', shorter_than_target:true, target_duration_s:330}; state.library[0].duration_s = 229; render()")
                     expect(page.locator(".badge").filter(has_text="Shorter than target · 3:49 of 5:30")).to_be_visible()
                     page.screenshot(path=str(args.artifacts / "duration-desktop.png"))
+                    # Check the review step before audio with local synthetic summaries.
+                    analysis_capable = True
+                    page.evaluate("Settings.refresh(true)")
+                    expect(page.locator("#duration-guide")).to_be_visible()
+                    page.locator("#len").fill("120")
+                    analysis_job = {"id": "duration-fixture", "kind": "duration-analysis", "status": "queued",
+                                    "created": time.time(), "params": {"style": "Piano"}}
+                    page.route("**/api/duration-analysis", lambda route: route.fulfill(json=analysis_job))
+                    page.route("**/api/jobs", lambda route: route.fulfill(json=[analysis_job]))
+                    before_analysis = len(generation_posts)
+                    with page.expect_request("**/api/duration-analysis") as analysis_request:
+                        page.locator("#analyze-duration").click()
+                    expect(page.locator("#duration-feedback")).to_contain_text("Waiting for the model")
+                    expect(page.locator("#go")).to_be_disabled()
+                    assert len(generation_posts) == before_analysis
+                    assert analysis_request.value.post_data_json["target_duration_s"] == 120
+                    analysis_job.update(status="running", started=time.time())
+                    page.evaluate("pollJobs()")
+                    expect(page.locator("#duration-feedback")).to_contain_text("The model is writing a musical plan")
+                    expect(page.locator("#duration-feedback progress")).to_be_visible()
+                    assert page.locator("#duration-feedback progress").get_attribute("value") is None
+                    analysis_job.update(status="done", result={"status": "too_short", "planned_duration_s": 180,
+                        "recommended_target_s": 180, "selected_target_s": 120, "max_target_s": 330,
+                        "bpm": 100, "removed_instrumental_bars": 0})
+                    page.evaluate("pollJobs()")
+                    expect(page.locator("#duration-feedback")).to_contain_text("Choose a longer duration")
+                    expect(page.locator("#duration-feedback")).to_contain_text("shorten a verse")
+                    expect(page.locator("#go")).to_be_disabled()
+                    page.screenshot(path=str(args.artifacts / "duration-suggestion-desktop.png"))
+                    page.locator("[data-duration='suggested']").click()
+                    expect(page.locator("#len")).to_have_value("180")
+                    expect(page.locator("#go")).to_be_enabled()
+                    page.route("**/api/generate", lambda route: route.fulfill(json={}))
+                    with page.expect_request("**/api/generate") as prepared_request:
+                        page.locator("#go").click()
+                    assert prepared_request.value.post_data_json["analysis_id"] == "duration-fixture"
+                    assert prepared_request.value.post_data_json["target_duration_s"] == 180
+                    page.locator("#lyrics").fill("[Verse]\nChanged synthetic verse\n[Outro]\nSynthetic ending")
+                    expect(page.locator("#duration-feedback")).to_contain_text("Your inputs changed")
+                    expect(page.locator("#go-label")).to_have_text("Analyze duration")
+                    page.locator("#duration-mode").select_option("auto")
+                    expect(page.locator("#duration-input")).to_be_hidden()
+                    analysis_job.update(id="automatic-fixture", status="queued")
+                    with page.expect_request("**/api/duration-analysis") as automatic_request:
+                        page.locator("#go").click()
+                    assert "target_duration_s" not in automatic_request.value.post_data_json
+                    analysis_job.update(status="done", result={"status": "ready", "planned_duration_s": 205,
+                        "recommended_target_s": 205, "selected_target_s": None, "max_target_s": 330,
+                        "bpm": 100, "removed_instrumental_bars": 0})
+                    page.evaluate("pollJobs()")
+                    expect(page.locator("#duration-feedback")).to_contain_text("Estimated song duration · 3:25")
+                    expect(page.locator("#duration-feedback")).to_contain_text("not guaranteed")
+                    page.set_viewport_size({"width": 390, "height": 844})
+                    page.locator("#duration-guide").scroll_into_view_if_needed()
+                    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                    page.screenshot(path=str(args.artifacts / "duration-ready-mobile.png"))
+                    page.set_viewport_size({"width": 1440, "height": 1000})
+                    with page.expect_request("**/api/generate") as automatic_generation:
+                        page.locator("#go").click()
+                    assert automatic_generation.value.post_data_json["target_duration_s"] == 205
+                    assert automatic_generation.value.post_data_json["analysis_id"] == "automatic-fixture"
+                    page.route("**/api/generate", lambda route: route.fulfill(status=409, json={"detail": "The duration analysis expired. Analyze again before creating the song."}))
+                    page.locator("#go").click()
+                    expect(page.locator("#duration-feedback")).to_contain_text("expired")
+                    expect(page.locator("#go-label")).to_have_text("Analyze duration")
+                    page.unroute("**/api/generate")
+                    page.unroute("**/api/jobs")
+                    page.unroute("**/api/duration-analysis")
+                    analysis_capable = False
+                    page.evaluate("Settings.refresh(true)")
                     page.locator(".song[data-name='legacy-song'] [data-act='info']").click()
                     for fmt, media in {"flac": "audio/flac", "mp3": "audio/mpeg"}.items():
                         link = page.locator(f"#drawer a[href='/api/export/legacy-song?format={fmt}']")
