@@ -14,7 +14,7 @@ on:
         type: string
         default: ''
       dry_run:
-        description: Preview only; no commit, tag, files or release published
+        description: Preview only; no tag or release published
         type: boolean
         default: true
         required: true
@@ -36,7 +36,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
-          # The read-only token allows release.sh to fetch a private origin.
+          # The read-only token allows release.sh to fetch the protected main branch.
           persist-credentials: true
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
@@ -70,7 +70,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
-          # Only this trusted, manually started job can push a version and tag.
+          # Only this manually started job can create a release tag.
           persist-credentials: true
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:

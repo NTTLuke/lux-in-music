@@ -9,13 +9,10 @@ Steps, in order:
 1. preflight: on `main`, clean tree, in sync with `origin/main`, tag still free
 2. the changes since the previous release tag
 3. repository checks (`scripts/check.py`, plus application checks with --full-checks)
-4. release files: version in `pyproject.toml` and `uv.lock`, `CHANGELOG.md` entry,
-   `README.md` "Releases and changelog" block
-5. the repository checks again, on the files that are about to be committed
-6. release commit and annotated tag
-7. artifacts built from the tag: source ZIP, wheel, sdist, `SHA256SUMS.txt`
-8. `main` and the tag pushed
-9. GitHub release created with the notes and the artifacts, then verified
+4. build versioned release artifacts in a temporary copy of the source
+5. create an annotated version tag on the unchanged `main` commit
+6. push the tag only
+7. create the GitHub release with notes and artifacts, then verify it
 
 Options: --dry-run, --skip-checks, --full-checks, --no-push, --no-build, -v.
 
@@ -26,26 +23,25 @@ links when `origin` is not a GitHub remote (a mirror, a local clone, a fork).
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime as _dt
 import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
+import zipfile
 from pathlib import Path
 from typing import NoReturn
 
 ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = ROOT / "pyproject.toml"
-README = ROOT / "README.md"
-CHANGELOG = ROOT / "CHANGELOG.md"
 DIST = ROOT / "dist"
 BRANCH = "main"
 PROJECT_NAME = "Lux In Music"
-
-README_START = "<!-- release:start -->"
-README_END = "<!-- release:end -->"
 
 SECTION_ORDER = ["Added", "Changed", "Fixed", "Documentation", "Tests and checks", "Other"]
 COUNT_WORDS = {
@@ -170,29 +166,28 @@ def next_version(current: str, bump: str) -> str:
     return bump
 
 
-def bump_pyproject(new_version: str, current: str) -> None:
-    if new_version == current:
-        detail(f"pyproject.toml already declares {new_version}; nothing to change")
-        return
-    text = PYPROJECT.read_text(encoding="utf-8")
+def current_release_version() -> str:
+    """Use the latest reachable release tag if main's package version lags it."""
+    current = read_version()
+    tag = last_tag()
+    match = re.fullmatch(r"v(\d+\.\d+\.\d+)", tag or "")
+    if match and parse_version(match.group(1)) > parse_version(current):
+        return match.group(1)
+    return current
+
+
+def set_project_version(source_root: Path, new_version: str) -> None:
+    """Set package metadata in a release staging tree, never in the checkout."""
+    pyproject = source_root / "pyproject.toml"
+    text = pyproject.read_text(encoding="utf-8")
     updated, count = re.subn(
         r'(?m)^version\s*=\s*"[^"]+"', f'version = "{new_version}"', text, count=1
     )
     if count != 1:
         die("could not update the version line in pyproject.toml")
-    PYPROJECT.write_text(updated, encoding="utf-8")
-    bump_lockfile(new_version)
-
-
-def bump_lockfile(new_version: str) -> None:
-    """Keep uv.lock's own project entry in step with pyproject.toml.
-
-    The lock records the editable project's version, and the repository checks
-    compare the two: releasing without this leaves a red CI on the release commit.
-    """
-    lock = ROOT / "uv.lock"
+    pyproject.write_text(updated, encoding="utf-8")
+    lock = source_root / "uv.lock"
     if not lock.exists():
-        detail("no uv.lock to update")
         return
     text = lock.read_text(encoding="utf-8")
     blocks = text.split("[[package]]")
@@ -203,9 +198,8 @@ def bump_lockfile(new_version: str) -> None:
             r'(?m)^version = "[^"]+"', f'version = "{new_version}"', block, count=1
         )
         lock.write_text("[[package]]".join(blocks), encoding="utf-8")
-        detail(f"uv.lock project entry set to {new_version}")
         return
-    die("could not find the project's editable entry in uv.lock")
+    die("could not find the project's editable entry in the staged uv.lock")
 
 
 # ---------------------------------------------------------------- history helpers
@@ -340,94 +334,44 @@ def render_sections(entries: list[dict[str, object]], slug: str, heading: str = 
     return lines
 
 
-def changelog_entry(version: str, release_date: str, entries: list[dict[str, object]], slug: str, previous: str | None) -> str:
-    lines = [f"## [{version}] - {release_date}", ""]
-    if previous is None:
-        lines += ["First published release of Lux In Music.", ""]
-    lines += render_sections(entries, slug)
-    return "\n".join(lines).rstrip() + "\n"
-
-
-def update_changelog(entry: str, version: str) -> None:
-    """Write the entry, replacing an existing section for the same version.
-
-    Replacing rather than always inserting keeps a re-run after an interrupted
-    release from duplicating the section.
-    """
-    header = (
-        "# Changelog\n\n"
-        "All notable changes to Lux In Music are documented in this file, one\n"
-        "section per GitHub release, newest first.\n\n"
-    )
-    text = CHANGELOG.read_text(encoding="utf-8") if CHANGELOG.exists() else header
-    existing = re.search(rf"(?m)^## \[{re.escape(version)}\][^\n]*\n", text)
-    if existing:
-        following = re.search(r"(?m)^## \[", text[existing.end() :])
-        end = existing.end() + (following.start() if following else len(text) - existing.end())
-        text = text[: existing.start()] + entry + "\n" + text[end:].lstrip("\n")
-        detail(f"replaced the existing {version} entry in CHANGELOG.md")
-    else:
-        position = text.find("\n## [")
-        if position == -1:
-            text = text.rstrip() + "\n\n" + entry
-        else:
-            text = text[: position + 1] + entry + "\n" + text[position + 1 :]
-    CHANGELOG.write_text(text.rstrip() + "\n", encoding="utf-8")
-
-
-# ---------------------------------------------------------------- README helpers
-
-
-def release_block(version: str, release_date: str, grouped: dict[str, list[dict[str, object]]], slug: str) -> str:
-    base = f"https://github.com/{slug}"
-    tag = f"{base}/releases/tag/v{version}"
-    zip_name = f"lux-in-music-v{version}.zip"
-    lines = [
-        README_START,
-        f"**Latest release: [v{version}]({tag})** · {release_date}",
-        "",
-        f"- **Download (recommended):** [`{zip_name}`]({base}/releases/download/v{version}/{zip_name})"
-        " — the app source, ready to extract",
-        f"- Also attached: `lux_in_music-{version}-py3-none-any.whl`,"
-        f" `lux_in_music-{version}.tar.gz`, `SHA256SUMS.txt`",
-        f"- [Release notes]({tag}) · [All releases]({base}/releases) · [CHANGELOG.md](CHANGELOG.md)",
-        "",
-        counts_line(grouped) + " See [CHANGELOG.md](CHANGELOG.md) for the full list.",
-        README_END,
-    ]
-    return "\n".join(lines)
-
-
-def update_readme(version: str, block: str, previous: str | None, slug: str) -> None:
-    text = README.read_text(encoding="utf-8")
-    if README_START in text and README_END in text:
-        head, rest = text.split(README_START, 1)
-        _, tail = rest.split(README_END, 1)
-        text = head + block + tail
-    else:
-        section = f"""## Releases and changelog
-
-Lux In Music is published as numbered [releases](https://github.com/{slug}/releases).
-Download the ZIP of the latest release, extract it, and continue with the steps
-below: the install and launch instructions are the same.
-
-{block}
-
-"""
-        marker = "## Install on a Mac"
-        if marker in text:
-            text = text.replace(marker, section + marker, 1)
-        else:
-            text = text.rstrip() + "\n\n" + section
-    README.write_text(text, encoding="utf-8")
-    if previous is None:
-        detail("README release section created")
-
-
 # ---------------------------------------------------------------- build helpers
 
 
-def build_artifacts(version: str, tag: str, slug: str, notes_path: Path, skip: bool) -> list[Path]:
+def stage_release_source(version: str, staging: Path) -> tuple[Path, Path]:
+    """Extract tracked HEAD and apply release metadata without touching the checkout."""
+    archive = staging / "source.zip"
+    source = staging / "source"
+    source.mkdir()
+    run(["git", "archive", "--format=zip", "--output", str(archive), "HEAD"])
+    with zipfile.ZipFile(archive) as packed_source:
+        packed_source.extractall(source)
+        for member in packed_source.infolist():
+            mode = member.external_attr >> 16 & 0o777
+            path = source / member.filename
+            if mode and path.exists():
+                path.chmod(mode)
+    set_project_version(source, version)
+    return source, archive
+
+
+def write_versioned_source_zip(archive: Path, source: Path, destination: Path, version: str) -> None:
+    """Keep Git archive permissions while changing only package metadata in the ZIP."""
+    prefix = f"lux-in-music-{version}/"
+    with zipfile.ZipFile(archive) as original, zipfile.ZipFile(
+        destination, "w", compression=zipfile.ZIP_DEFLATED
+    ) as packed:
+        for original_info in original.infolist():
+            info = copy.copy(original_info)
+            original_name = info.filename
+            info.filename = prefix + original_name
+            if original_name in {"pyproject.toml", "uv.lock"}:
+                data = (source / original_name).read_bytes()
+            else:
+                data = original.read(original_info)
+            packed.writestr(info, data)
+
+
+def build_artifacts(version: str, notes_path: Path, skip: bool) -> list[Path]:
     DIST.mkdir(exist_ok=True)
     zip_path = DIST / f"lux-in-music-v{version}.zip"
     wheel = DIST / f"lux_in_music-{version}-py3-none-any.whl"
@@ -441,21 +385,21 @@ def build_artifacts(version: str, tag: str, slug: str, notes_path: Path, skip: b
         detail("artifact build skipped (--no-build)")
         return []
 
-    run(
-        [
-            "git",
-            "archive",
-            "--format=zip",
-            f"--prefix=lux-in-music-{version}/",
-            "-o",
-            str(zip_path),
-            tag,
-        ]
-    )
-    run(["uv", "build", "--out-dir", str(DIST)], echo=True)
-    missing = [path.name for path in (wheel, sdist) if not path.exists()]
-    if missing:
-        die(f"uv build did not produce: {', '.join(missing)}")
+    with tempfile.TemporaryDirectory(prefix="lux-release-") as temporary:
+        staging = Path(temporary)
+        source, archive = stage_release_source(version, staging)
+        write_versioned_source_zip(archive, source, zip_path, version)
+
+        build_dir = source / "dist"
+        build_dir.mkdir(exist_ok=True)
+        run(["uv", "build", "--out-dir", str(build_dir)], echo=True, cwd=source)
+        built_wheel = build_dir / wheel.name
+        built_sdist = build_dir / sdist.name
+        missing = [path.name for path in (built_wheel, built_sdist) if not path.exists()]
+        if missing:
+            die(f"uv build did not produce: {', '.join(missing)}")
+        shutil.copy2(built_wheel, wheel)
+        shutil.copy2(built_sdist, sdist)
 
     artifacts = [zip_path, wheel, sdist]
     sums = DIST / "SHA256SUMS.txt"
@@ -478,6 +422,11 @@ def sha256(path: Path) -> str:
 
 def release_notes(version: str, release_date: str, entries: list[dict[str, object]], slug: str, previous: str | None) -> str:
     base = f"https://github.com/{slug}"
+    history_url = (
+        f"{base}/compare/{previous}...v{version}"
+        if previous
+        else f"{base}/commits/v{version}"
+    )
     lines = [f"# {PROJECT_NAME} v{version}", "", f"Released {release_date}.", ""]
     if previous is None:
         lines += ["First published release.", ""]
@@ -492,7 +441,7 @@ def release_notes(version: str, release_date: str, entries: list[dict[str, objec
         "- `SHA256SUMS.txt` — checksums of the three files above.",
         "",
         f"Install guide: [Install on a Mac]({base}/blob/{BRANCH}/README.md#install-on-a-mac).",
-        f"Full history: [CHANGELOG.md]({base}/blob/{BRANCH}/CHANGELOG.md).",
+        f"Full history: [release changes]({history_url}).",
         "",
         "If Terminal reports `Permission denied` after extracting the ZIP, run:",
         "",
@@ -541,11 +490,10 @@ def main() -> None:
 
     VERBOSE = args.verbose
     slug = repo_slug()
-    current = read_version()
+    current = current_release_version()
     version = next_version(current, args.bump)
     tag = f"v{version}"
     release_date = _dt.date.today().isoformat()
-    pretty_date = _dt.date.today().strftime("%-d %B %Y") if sys.platform != "win32" else release_date
     publish = not args.dry_run and not args.no_push
 
     if version == current:
@@ -553,8 +501,8 @@ def main() -> None:
     else:
         log(f"{PROJECT_NAME} release: {current} -> {version}  ({slug})")
     if args.dry_run:
-        log("Dry run: no file, commit, tag or release is created.")
-    total = 7 if args.dry_run else 9
+        log("Dry run: no files, tag or release are created.")
+    total = 7
 
     # 1 ---------------------------------------------------------------- preflight
     step(1, total, "Check the repository state")
@@ -567,14 +515,6 @@ def main() -> None:
     if dirty:
         die("the working tree is not clean:\n  " + "\n  ".join(dirty))
     detail("working tree clean")
-    # uv build writes its own dist/.gitignore that hides the artifacts; on a fresh
-    # clone dist/ does not exist yet, so create the same protection here before the
-    # guard below, which would otherwise refuse every first release.
-    DIST.mkdir(exist_ok=True)
-    dist_ignore = DIST / ".gitignore"
-    if not dist_ignore.exists():
-        dist_ignore.write_text("*\n", encoding="utf-8")
-        detail("created dist/.gitignore so the artifacts stay out of Git")
     if run(["git", "check-ignore", "-q", "dist/"], check=False).returncode != 0:
         die("dist/ is not ignored by Git; the release artifacts would be committed")
     if run(["git", "rev-parse", "-q", "--verify", f"refs/tags/{tag}"], check=False).returncode == 0:
@@ -631,68 +571,42 @@ def main() -> None:
     if after_checks:
         die("the checks left the working tree dirty:\n  " + "\n  ".join(after_checks))
 
-    # 4 ---------------------------------------------------------------- files
-    step(4, total, "Write the release files")
-    entry = changelog_entry(version, release_date, entries, slug, previous)
-    block = release_block(version, pretty_date, grouped, slug)
+    # 4 ----------------------------------------------------- notes and artifacts
+    step(4, total, "Prepare release notes and versioned artifacts")
     notes = release_notes(version, release_date, entries, slug, previous)
-    expected = ["pyproject.toml", "uv.lock", "CHANGELOG.md", "README.md"]
     if args.dry_run:
-        if version == current:
-            log(f"       pyproject.toml: version {version} (already current, no change)")
-        else:
-            log(f"       pyproject.toml: version {current} -> {version}")
-        log("       CHANGELOG.md entry:\n")
-        log("\n".join("         " + line for line in entry.rstrip().splitlines()))
-        log("\n       README.md block:\n")
-        log("\n".join("         " + line for line in block.splitlines()))
-        log("\n       dist/RELEASE_NOTES.md:\n")
+        log(f"       package metadata in release assets: {version}")
+        log("       README.md, CHANGELOG.md and main: unchanged")
+        log("\n       release notes:\n")
         log("\n".join("         " + line for line in notes.rstrip().splitlines()))
         log("")
-        log(f"       artifacts for {tag}: dist/lux-in-music-{tag}.zip, dist/RELEASE_NOTES.md")
-        log(f"       next real run: ./release.sh {args.bump}   (pushes {BRANCH} and {tag})")
+        log(f"       artifacts: versioned source ZIP, wheel, sdist and checksums")
+        log(f"       next real run: ./release.sh {args.bump}   (pushes only {tag})")
         return
 
     DIST.mkdir(exist_ok=True)
     notes_path = DIST / f"RELEASE_NOTES-{tag}.md"
     notes_path.write_text(notes, encoding="utf-8")
-    bump_pyproject(version, current)
-    update_changelog(entry, version)
-    update_readme(version, block, previous, slug)
+    artifacts = build_artifacts(version, notes_path, args.no_build)
     changed = changed_files()
-    unexpected = [path for path in changed if path not in expected]
-    if unexpected:
-        die("unexpected changes before the release commit:\n  " + "\n  ".join(unexpected))
-    log(f"       updated: {', '.join(changed)}")
+    if changed:
+        die("release preparation changed tracked or unignored files:\n  " + "\n  ".join(changed))
 
-    # 5 ---------------------------------------------------------------- verify
-    step(5, total, "Verify the release files with the repository checks")
-    # The step 3 run checked the state before the version bump. This run checks the
-    # state that is about to be committed and pushed, which is what CI will see.
-    run_checks(args.full_checks, args.skip_checks)
-
-    # 6 ---------------------------------------------------------------- commit
-    step(6, total, "Commit and tag")
-    run(["git", "add", *expected])
-    run(["git", "commit", "-m", f"Release v{version}", "-m", counts_line(grouped)])
+    # 5 ------------------------------------------------------------------ tag
+    step(5, total, "Tag the unchanged main commit")
     run(["git", "tag", "-a", tag, "-m", f"{PROJECT_NAME} v{version}"])
-    log(f"       commit {git('rev-parse', '--short', 'HEAD')} tagged {tag}")
+    log(f"       {tag} points to main at {git('rev-parse', '--short', 'HEAD')}")
 
-    # 7 ---------------------------------------------------------------- build
-    step(7, total, "Build the release artifacts")
-    artifacts = build_artifacts(version, tag, slug, notes_path, args.no_build)
-
-    # 8 ---------------------------------------------------------------- push
-    step(8, total, "Push the commit and the tag")
+    # 6 --------------------------------------------------------------- push tag
+    step(6, total, "Push the release tag")
     if args.no_push:
         log("       push skipped (--no-push)")
     else:
-        run(["git", "push", "origin", BRANCH], echo=True)
         run(["git", "push", "origin", tag], echo=True)
-        log(f"       {BRANCH} and {tag} are on origin")
+        log(f"       only {tag} was pushed; {BRANCH} is unchanged")
 
-    # 9 ---------------------------------------------------------------- release
-    step(9, total, "Create the GitHub release")
+    # 7 --------------------------------------------------------------- release
+    step(7, total, "Create the GitHub release")
     if not publish:
         log("       release not created (--no-push)")
         log(f"\n       local artifacts: {', '.join(path.name for path in artifacts) or 'none'}")

@@ -191,7 +191,9 @@
       "acceptance": [
         "Preview invokes the shared release script with full checks and no publication.",
         "Publication uses the same script with a validated version and full checks.",
-        "Non-main refs, automatic events, invalid inputs and downgrades cannot start a release."
+        "Non-main refs, automatic events, invalid inputs and downgrades cannot start a release.",
+        "Release assets receive their version in a temporary source copy; main, README and CHANGELOG remain unchanged.",
+        "The release tag is the only ref pushed by publication."
       ]
     }
   ]
