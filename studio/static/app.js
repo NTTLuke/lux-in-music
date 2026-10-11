@@ -304,6 +304,11 @@ function setupForm() {
     ta.setRangeText(ins, pos, ta.selectionEnd, "end"); ta.focus(); updateLyricsCount();
   };
   $("lyrics").oninput = updateLyricsCount; updateLyricsCount();
+  $("instrumental").onchange = () => {
+    // YuE2 mutes the vocal line of a planned score; Direct has no score to mute.
+    if ($("instrumental").checked && state.cot === "off") { state.cot = "full"; setSegmented("cot", "full"); }
+    updateLyricsCount();
+  };
 
   $("chips").innerHTML = Object.entries(CHIPS).map(([g, list]) =>
     `<div class="chip-group"><span class="gname">${g}</span>${list.map((c) => `<button type="button" class="chip" data-c="${esc(c)}">${esc(c)}</button>`).join("")}</div>`).join("");
@@ -318,7 +323,7 @@ function setupForm() {
 
   segmented("cot", (v) => {
     state.cot = v;
-    if (v === "off") $("duration-mode").value = "cap";
+    if (v === "off") { $("duration-mode").value = "cap"; $("instrumental").checked = false; }
     updateDurationUI();
   });
   segmented("variations", (v) => { state.variations = Number(v); updateGoLabel(); });
@@ -349,6 +354,9 @@ function segmented(id, onChange) {
 function setSegmented(id, v) { for (const x of $(id).children) x.classList.toggle("on", x.dataset.v === String(v)); }
 function paintRange(el) { el.style.setProperty("--p", `${((el.value - el.min) / (el.max - el.min)) * 100}%`); }
 function updateLyricsCount() {
+  const instrumental = $("instrumental").checked;
+  $("lyrics").hidden = $("section-tags").hidden = $("lyrics-count").hidden = instrumental;
+  if (instrumental) { $("lyrics-advice").textContent = "No vocals: the lyrics are not used and the planned score's vocal line is muted. Describe instruments in the style and leave out vocal tags."; return; }
   const v = $("lyrics").value, lines = v.split("\n").filter((l) => l.trim() && !/^\[.*\]$/.test(l.trim())).length;
   $("lyrics-count").textContent = `${lines} lines · ${v.length} chars`;
   const words = v.replace(/^\[.*\]$/gm, "").trim().split(/\s+/).filter(Boolean).length;
@@ -396,6 +404,7 @@ async function submit(e) {
   const base = {
     title: $("title").value.trim() || undefined,
     lyrics: $("lyrics").value, style: $("style").value,
+    instrumental: Settings.capability().instrumental && $("instrumental").checked || undefined,
     target_duration_s: Settings.capability().target_duration_s && $("duration-mode").value === "target" ? Number($("len").value) : undefined,
     max_duration_s: Settings.capability().max_duration_s && !(Settings.capability().target_duration_s && $("duration-mode").value === "target") ? Number($("len").value) : undefined,
     model_options: Settings.options(),
@@ -420,7 +429,9 @@ async function submit(e) {
 function loadIntoForm(p) {
   p = { ...p, ...(p.model_options || {}) };
   $("title").value = p.title || "";
-  $("lyrics").value = p.lyrics || ""; updateLyricsCount();
+  $("instrumental").checked = Boolean(p.instrumental);
+  if (!p.instrumental) $("lyrics").value = p.lyrics || "";
+  updateLyricsCount();
   $("style").value = p.style || ""; syncChips();
   state.cot = p.cot || "off"; setSegmented("cot", state.cot);
   $("duration-mode").value = p.target_duration_s ? "target" : "cap";
@@ -653,8 +664,10 @@ async function openDrawer(s) {
         <a class="btn" href="/outputs/${encodeURIComponent(s.name)}.wav" download><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>WAV</a>
         ${["flac", "mp3"].map((f) => `<a class="btn" href="/api/export/${encodeURIComponent(s.name)}?format=${f}" download><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>${f.toUpperCase()}</a>`).join("")}
         ${s.artifacts?.score ? `<a class="btn" href="/outputs/${encodeURIComponent(s.artifacts.score)}" download><svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/></svg>Score</a>` : ""}
+        <button class="btn danger" data-act="ddelete"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Delete</button>
       </div>
-      <div class="d-sec"><h4>Lyrics</h4><div class="d-lyrics">${lyr}</div></div>
+      <p class="error" id="d-error" role="alert"></p>
+      ${p.instrumental ? '<div class="d-sec"><h4>Lyrics</h4><p class="hint">Instrumental · no vocals requested</p></div>' : p.lyrics?.trim() ? `<div class="d-sec"><h4>Lyrics</h4><div class="d-lyrics">${lyr}</div></div>` : ""}
       <div class="d-sec"><h4>Generation</h4><div class="kv">${kv.map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("")}</div></div>
       ${abc ? `<div class="d-sec"><h4>Generated score (ABC)</h4><pre class="abc">${esc(abc)}</pre></div>` : ""}
     </div>`;
@@ -669,7 +682,18 @@ $("drawer").onclick = (e) => {
   if (act === "dplay") togglePlay(s);
   if (act === "dreuse") { closeDrawer(); loadIntoForm(s.params); }
   if (act === "dlux") { closeDrawer(); Lux.open(s.name); }
+  if (act === "ddelete") deleteSong(s);
 };
+async function deleteSong(s) {
+  if (!confirm(`Delete "${s.title}"? This removes its audio, score and stems. It cannot be undone.`)) return;
+  const r = await fetch(`/api/songs/${encodeURIComponent(s.name)}`, { method: "DELETE" });
+  if (!r.ok) { $("d-error").textContent = (await r.json().catch(() => ({}))).detail || "Could not delete this song."; return; }
+  if (state.current?.name === s.name) {
+    audio.pause(); audio.removeAttribute("src"); state.current = null;
+    $("p-title").textContent = "Nothing playing"; $("p-style").textContent = ""; $("p-dl").removeAttribute("href");
+  }
+  closeDrawer(); await loadLibrary();
+}
 
 /* ---------- engine health ---------- */
 

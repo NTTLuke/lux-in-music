@@ -14,9 +14,10 @@ from .params import GenerationParams
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Lux In Music: generate with the model selected in Settings")
-    src = ap.add_mutually_exclusive_group(required=True)
+    src = ap.add_mutually_exclusive_group()
     src.add_argument("--lyrics", help="lyrics text (use \\n for new lines)")
     src.add_argument("--lyrics-file", type=Path)
+    ap.add_argument("--instrumental", action="store_true", help="no vocals; lyrics are ignored")
     ap.add_argument("--style", required=True)
     ap.add_argument("--cot", choices=["off", "melody", "full"], help="YuE2 planning option")
     ap.add_argument("--seed", type=int, default=1234)
@@ -29,7 +30,7 @@ def main() -> None:
     ap.add_argument("--name", help="output file stem (default: timestamp-seed)")
     a = ap.parse_args()
 
-    lyrics = a.lyrics_file.read_text() if a.lyrics_file else a.lyrics.replace("\\n", "\n")
+    lyrics = a.lyrics_file.read_text() if a.lyrics_file else (a.lyrics or "").replace("\\n", "\n")
     if not isinstance(a.model_options, dict):
         ap.error("--model-options must be a JSON object")
     options = dict(a.model_options)
@@ -40,7 +41,7 @@ def main() -> None:
             if key in options and options[key] != value:
                 ap.error(f"Conflicting model option: {key}")
             options[key] = value
-    params = GenerationParams(lyrics=lyrics, style=a.style, seed=a.seed,
+    params = GenerationParams(lyrics=lyrics, instrumental=a.instrumental, style=a.style, seed=a.seed,
                               max_duration_s=a.max_duration_s, target_duration_s=a.target_duration_s, model_options=options)
     try:
         if engine.health().get("setup_required"):

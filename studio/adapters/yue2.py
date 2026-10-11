@@ -19,7 +19,8 @@ class YuE2Params(BaseModel):
     model_config = ConfigDict(extra="forbid")
     # --- core ---
     title: str | None = Field(None, max_length=80, description="Song title (UI only, not sent to the model)")
-    lyrics: str = Field(..., min_length=1, description="Lyrics with [Verse]/[Chorus]/... section tags")
+    lyrics: str = Field("", description="Lyrics with [Verse]/[Chorus]/... section tags; may be empty")
+    instrumental: bool = Field(False, description="No vocals: replaces the lyrics with the [instrumental] tag")
     style: str = Field(..., min_length=1, description="Style prompt: language, genre, instruments, vocal, mix")
     cot: Literal["off", "melody", "full"] = Field("off", description="Symbolic planning route")
     seed: int = Field(1234, ge=0, lt=2**63)
@@ -48,6 +49,12 @@ class YuE2Params(BaseModel):
 
     @model_validator(mode="after")
     def _check(self):
+        if self.instrumental:
+            # Upstream's instrumental guidance; normalizing here keeps edits and token recovery identical.
+            # The vocal line is muted in the planned score, so planning is required.
+            self.lyrics = "[instrumental]"
+            if self.cot == "off":
+                self.cot = "full"
         if self.abc and self.cot == "off":
             raise ValueError("abc requires cot=melody or cot=full")
         if self.target_duration_s:
@@ -74,7 +81,7 @@ class YuE2Params(BaseModel):
 
     def to_request(self) -> dict:
         """Build the body for audio.cpp POST /v1/tasks/run (`request` field)."""
-        skip = {"title", "lyrics", "seed", "max_duration_s", "target_duration_s"}
+        skip = {"title", "lyrics", "instrumental", "seed", "max_duration_s", "target_duration_s"}
         options = {
             k: str(v).lower() if isinstance(v, bool) else str(v)
             for k, v in self.model_dump(exclude_none=True).items()
@@ -85,7 +92,7 @@ class YuE2Params(BaseModel):
 
 class YuE2Adapter:
     """Translate shared inputs into the native YuE2 request."""
-    capabilities = {"planning": ["off", "melody", "full"], "abc": True,
+    capabilities = {"planning": ["off", "melody", "full"], "abc": True, "instrumental": True,
                     "semantic_edit": True, "max_duration_s": 360,
                     "target_duration_s": 330, "min_target_duration_s": 30,
                     "options": ["num_inference_steps", "guidance_scale", "semantic_temperature",
@@ -111,8 +118,38 @@ class YuE2Adapter:
                             "semantic_min_tokens": "8", "semantic_max_tokens": "16",
                             "num_inference_steps": "1"}}
 
+    @staticmethod
+    def _plan(request, p, run, progress, report, artifacts, accept, failure):
+        """Plan up to three scores; accept(text) returns (score, info) or raises ScoreError."""
+        from .yue2_score import ScoreError
+        for attempt in range(3):
+            if progress:
+                progress(f"Planning arrangement ({attempt + 1}/3)")
+            planning = copy.deepcopy(request)
+            planning["seed"] = (p.seed + attempt) % (2**63)
+            planning["options"]["stop_after"] = "abc"
+            result = run(planning)
+            art = next((a for a in result.get("artifacts", []) if a["id"] == "score"), None)
+            entry = {"seed": planning["seed"]}
+            if art:
+                artifacts.append({**art, "id": f"plan-{attempt + 1}"})
+            try:
+                if not art or str(art.get("meta", {}).get("truncated")).lower() != "false":
+                    raise ScoreError("The planner did not return a complete score")
+                chosen, info = accept(base64.b64decode(art["payload"]).decode("utf-8"))
+                entry.update(info)
+                report["planning"] = {**info, "source": "generated", "seed": planning["seed"]}
+                report["planning_attempts"].append(entry)
+                return chosen
+            except (ValueError, UnicodeError) as error:
+                entry["error"] = str(error)
+                report["planning_attempts"].append(entry)
+        error = ScoreError(failure + " " + report["planning_attempts"][-1]["error"])
+        error.diagnostics = {"generation": report, "artifacts": artifacts}
+        raise error
+
     def generate(self, params, run, progress=None):
-        from .yue2_score import inspect, fit, ScoreError
+        from .yue2_score import inspect, fit, mute_vocals, ScoreError
         p = self.normalize(params)
         request = self.request(p)
         report = {"target_duration_s": p.target_duration_s,
@@ -127,34 +164,10 @@ class YuE2Adapter:
                 report["planning"] = {"planned_duration_s": round(score.duration_s, 2), "source": "supplied"}
                 chosen = p.abc
             else:
-                chosen = None
-                for attempt in range(3):
-                    if progress:
-                        progress(f"Planning arrangement ({attempt + 1}/3)")
-                    planning = copy.deepcopy(request)
-                    planning["seed"] = (p.seed + attempt) % (2**63)
-                    planning["options"]["stop_after"] = "abc"
-                    result = run(planning)
-                    art = next((a for a in result.get("artifacts", []) if a["id"] == "score"), None)
-                    entry = {"seed": planning["seed"]}
-                    if art:
-                        artifacts.append({**art, "id": f"plan-{attempt + 1}"})
-                    try:
-                        if not art or str(art.get("meta", {}).get("truncated")).lower() != "false":
-                            raise ScoreError("The planner did not return a complete score")
-                        text = base64.b64decode(art["payload"]).decode("utf-8")
-                        chosen, info = fit(text, p.target_duration_s)
-                        entry.update(info)
-                        report["planning"] = {**info, "source": "generated", "seed": planning["seed"]}
-                    except (ValueError, UnicodeError) as error:
-                        entry["error"] = str(error)
-                    report["planning_attempts"].append(entry)
-                    if chosen is not None:
-                        break
-                if chosen is None:
-                    error = ScoreError("No complete arrangement fits the requested duration after three plans. " + report["planning_attempts"][-1]["error"])
-                    error.diagnostics = {"generation": report, "artifacts": artifacts}
-                    raise error
+                chosen = self._plan(request, p, run, progress, report, artifacts, lambda text: fit(mute_vocals(text) if p.instrumental else text, p.target_duration_s),
+                                    "No complete arrangement fits the requested duration after three plans.")
+            if p.instrumental:
+                chosen = mute_vocals(chosen)
             request["options"]["abc"] = chosen
             artifacts.append({"id": "score", "payload": base64.b64encode(chosen.encode()).decode(),
                               "meta": {"truncated": "false", "source": "duration-checked", "format": "abc"}})
@@ -209,6 +222,18 @@ class YuE2Adapter:
             # this separately from EOS observed at the composing stage.
             data["artifacts"] = [a for a in data.get("artifacts", []) if a["id"] != "semantic"]
             data["artifacts"].append(semantic)
+        elif p.instrumental:
+            chosen = mute_vocals(p.abc) if p.abc else self._plan(
+                request, p, run, progress, report, artifacts,
+                lambda text: (mute_vocals(text), {"planned_duration_s": round(inspect(text).duration_s, 2)}),
+                "No complete instrumental arrangement after three plans.")
+            request["options"]["abc"] = chosen
+            artifacts.append({"id": "score", "payload": base64.b64encode(chosen.encode()).decode(),
+                              "meta": {"truncated": "false", "source": "vocals-muted", "format": "abc"}})
+            if progress:
+                progress("Rendering the instrumental arrangement")
+            data = run(request)
+            data["artifacts"] = [a for a in data.get("artifacts", []) if a["id"] != "score"]
         else:
             data = run(request)
         # Supplied ABC is not exported by the native runtime, so retain our plan.
