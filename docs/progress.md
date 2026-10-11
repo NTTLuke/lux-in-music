@@ -11,7 +11,9 @@
 - Verification: offline API test with a blocking fake provider (queued and
   running jobs, no output written), a provider test for a stop during engine
   start, and a browser check for the stop button. Full checks pass. A real
-  audio.cpp generation was stopped manually in `./studio.sh` on macOS (Metal).
+  audio.cpp generation was stopped in `./studio.sh` on macOS (Metal) 5 s after
+  it started; it ended `cancelled` with no output, and the next generation
+  restarted the engine and finished a song (about 3 minutes).
 - Limits: the next job pays the model load again. Running separation and stem edits cannot be stopped yet;
   they run several engine calls that do not check the stop request.
 - Next step: allow stopping running separations and stem edits.
