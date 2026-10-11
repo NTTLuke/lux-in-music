@@ -1,5 +1,26 @@
 # Project handoff
 
+## Manual releases on GitHub Actions
+
+Branch: `ci/manual-release-actions`, issue #22.
+
+- Added a manually started Release workflow with a preview enabled by default,
+  patch/minor/major selection and an optional exact version. It reuses release.sh
+  and always runs full offline checks; no model setup or native runtime build.
+- Preview/validation use a read-only token. Publication alone has contents write,
+  uses the selected main revision, and refuses a stale main or existing tag.
+  Releases are serialized. Official actions, including the existing check action,
+  are pinned to verified upstream commit IDs. No personal token is configured.
+- Seven portable regression cases cover preview/publication command selection,
+  main/manual-event gates, exact versions, invalid values, injection-like input,
+  downgrades, and refusing to start the script on invalid input.
+- Baseline and full application checks passed locally. GitHub execution is still
+  pending until the workflow reaches the default branch. A preview does not build
+  or upload packages; those steps run only during actual publication.
+- README and CONTRIBUTING explain the GitHub buttons, permissions, stale-main
+  handling and recovery files. Publication failures retain built files for seven
+  days. Local release usage and model/song exclusion remain unchanged.
+
 ## Release v0.3.0
 
 - The user requested a new version after merging PR #20. A minor release includes

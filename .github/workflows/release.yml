@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version increment (ignored when an exact version is given)
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+        required: true
+      version:
+        description: Optional exact version, such as 0.3.1 (without v)
+        type: string
+        default: ''
+      dry_run:
+        description: Preview only; no commit, tag, files or release published
+        type: boolean
+        default: true
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lux-release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          # The read-only token allows release.sh to fetch a private origin.
+          persist-credentials: true
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Prepare software tools (no models or inference engine)
+        run: python -m pip install uv==0.10.10
+      - name: Prepare the main branch and release identity
+        run: |
+          git switch -C main
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+      - name: Check inputs, run offline tests and preview the release
+        env:
+          RELEASE_BUMP: ${{ inputs.bump }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_DRY_RUN: 'true'
+        run: python scripts/release_ci.py
+      - name: Preview result
+        if: inputs.dry_run
+        run: echo 'Preview passed. No version was published. Run again with Preview only unchecked to publish.' >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    needs: validate
+    if: github.ref == 'refs/heads/main' && !inputs.dry_run
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          # Only this trusted, manually started job can push a version and tag.
+          persist-credentials: true
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Prepare software tools (no models or inference engine)
+        run: python -m pip install uv==0.10.10
+      - name: Prepare the main branch and release identity
+        run: |
+          git switch -C main
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+      - name: Build, tag and publish through the shared release script
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_BUMP: ${{ inputs.bump }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_DRY_RUN: 'false'
+        run: python scripts/release_ci.py
+      - name: Keep built files for recovery if publication fails
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-files-${{ github.run_id }}
+          path: |
+            dist/*.zip
+            dist/*.whl
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt
+            dist/RELEASE_NOTES-*.md
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Published release
+        run: echo 'Release published. Open the repository Releases page for the ZIP and checksums.' >> "$GITHUB_STEP_SUMMARY"

@@ -142,7 +142,7 @@ def main() -> int:
         ("Package and lock metadata", lambda: check_metadata(ROOT)),
         ("Shared instructions and bridges", lambda: check_bridges(ROOT)),
         ("Python, JavaScript, and shell syntax", lambda: check_syntax(files)),
-        ("Harness regression tests", lambda: run_tests(["tests.test_harness"])),
+        ("Harness regression tests", lambda: run_tests(["tests.test_harness", "tests.test_release_ci"])),
     ]
     for name, check in checks:
         try:
