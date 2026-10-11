@@ -9,6 +9,7 @@ from typing import Literal
 import base64
 import copy
 import json
+import math
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -93,6 +94,7 @@ class YuE2Params(BaseModel):
 class YuE2Adapter:
     """Translate shared inputs into the native YuE2 request."""
     capabilities = {"planning": ["off", "melody", "full"], "abc": True, "instrumental": True,
+                    "duration_analysis": True,
                     "semantic_edit": True, "max_duration_s": 360,
                     "target_duration_s": 330, "min_target_duration_s": 30,
                     "options": ["num_inference_steps", "guidance_scale", "semantic_temperature",
@@ -164,8 +166,91 @@ class YuE2Adapter:
         error.diagnostics = {"generation": report, "artifacts": artifacts}
         raise error
 
-    def generate(self, params, run, progress=None):
-        from .yue2_score import inspect, fit, mute_vocals, retime, ScoreError
+    def _score_for_analysis(self, text, p):
+        from .yue2_score import inspect, retime, mute_vocals
+        score = inspect(text)
+        info = {"planner_bpm": score.bpm, "planner_duration_s": round(score.duration_s, 2)}
+        bpm = self._requested_bpm(p.style)
+        if bpm is not None:
+            text, _ = retime(text, bpm)
+            info.update(requested_bpm=bpm, tempo_adjusted_to_match_style=score.bpm != bpm)
+        if p.instrumental:
+            text = mute_vocals(text)
+        return text, info
+
+    def analyze_duration(self, params, run, progress=None):
+        """Prepare a reusable local plan and public duration advice, without audio."""
+        from .yue2_score import inspect, fit, ScoreError
+        p = self.normalize(params)
+        if p.cot == "off":
+            p.cot = "full"
+        limit = self.capabilities["target_duration_s"]
+        target = p.target_duration_s or limit
+        report, artifacts, source = {"planning_attempts": []}, [], {}
+
+        def accept(text):
+            source["score"], tempo = self._score_for_analysis(text, p)
+            chosen, info = fit(source["score"], target)
+            return chosen, {**tempo, **info}
+
+        if p.abc:
+            source["score"] = p.abc
+            if p.instrumental:
+                from .yue2_score import mute_vocals
+                source["score"] = mute_vocals(p.abc)
+            score = inspect(source["score"])
+            minimum = score.duration_s
+            report["planning"] = {"source": "supplied", "planned_duration_s": minimum, "bpm": score.bpm}
+            too_short = minimum > target
+        else:
+            try:
+                self._plan(self.request(p), p, run, progress, report, artifacts, accept,
+                           "The model could not prepare a complete arrangement.")
+                minimum = report["planning"]["planned_duration_s"]
+                too_short = False
+            except ScoreError:
+                candidates = [(i, a) for i, a in enumerate(report["planning_attempts"])
+                              if "minimum_duration_s" in a]
+                if not candidates:
+                    raise
+                index, best = min(candidates, key=lambda pair: pair[1]["minimum_duration_s"])
+                art = next(a for a in artifacts if a["id"] == f"plan-{index + 1}")
+                source["score"], tempo = self._score_for_analysis(base64.b64decode(art["payload"]).decode(), p)
+                minimum = best["minimum_duration_s"]
+                report["planning"] = {**tempo, "source": "generated", "seed": best["seed"], "bpm": best["bpm"]}
+                too_short = True
+        recommendation = min(limit, max(30, math.ceil(minimum / 5) * 5)) if minimum <= limit else None
+        status = "too_long" if recommendation is None else "too_short" if too_short else "ready"
+        planned = minimum
+        if recommendation is not None and not p.abc:
+            _, info = fit(source["score"], recommendation if too_short or not p.target_duration_s else target)
+            report["planning"].update(info)
+            planned = info["planned_duration_s"]
+        summary = {"status": status, "planned_duration_s": round(planned, 2),
+                   "original_duration_s": round(inspect(source["score"]).duration_s, 2),
+                   "recommended_target_s": recommendation, "selected_target_s": p.target_duration_s,
+                   "bpm": inspect(source["score"]).bpm, "max_target_s": limit,
+                   "removed_instrumental_bars": report["planning"].get("removed_instrumental_bars", 0),
+                   "supplied_score": bool(p.abc), "instrumental": p.instrumental}
+        return {"analysis": summary, "prepared": {"score": source["score"], "report": report, "artifacts": artifacts},
+                "params": p.model_dump(exclude_none=True)}
+
+    def reuse_plan(self, params, prepared):
+        from .yue2_score import inspect, fit, ScoreError
+        p = self.normalize(params)
+        if not p.target_duration_s:
+            raise ScoreError("Choose a complete-song duration to use the analyzed arrangement.")
+        planning = prepared["report"]["planning"]
+        if planning["source"] == "supplied":
+            score = inspect(prepared["score"])
+            if score.duration_s > p.target_duration_s:
+                raise ScoreError(f"This score needs about {math.ceil(score.duration_s)}s. Choose a longer duration.")
+            return prepared["score"], {**planning, "analysis_reused": True}
+        chosen, info = fit(prepared["score"], p.target_duration_s)
+        return chosen, {**planning, **info, "analysis_reused": True}
+
+    def generate(self, params, run, progress=None, prepared=None):
+        from .yue2_score import inspect, fit, mute_vocals, ScoreError
         p = self.normalize(params)
         request = self.request(p)
         report = {"target_duration_s": p.target_duration_s,
@@ -173,7 +258,12 @@ class YuE2Adapter:
                   "planning_attempts": [], "listening_verified": False}
         artifacts = []
         if p.target_duration_s:
-            if p.abc:
+            if prepared is not None:
+                chosen, info = self.reuse_plan(p, prepared)
+                report.update(copy.deepcopy(prepared["report"]))
+                report["planning"] = info
+                artifacts = copy.deepcopy(prepared["artifacts"])
+            elif p.abc:
                 score = inspect(p.abc)
                 if score.duration_s > p.target_duration_s:
                     raise ScoreError(f"Your score lasts about {score.duration_s:.0f}s. Choose a longer target or edit the score; supplied scores are never shortened automatically.")
@@ -183,16 +273,10 @@ class YuE2Adapter:
                 requested_bpm = self._requested_bpm(p.style)
 
                 def accept_generated_score(text):
-                    planned_bpm = inspect(text).bpm
-                    planned_duration_s = round(inspect(text).duration_s, 2)
+                    text, tempo = self._score_for_analysis(text, p)
+                    fitted, info = fit(text, p.target_duration_s)
                     if requested_bpm is not None:
-                        text, _ = retime(text, requested_bpm)
-                    fitted, info = fit(mute_vocals(text) if p.instrumental else text, p.target_duration_s)
-                    if requested_bpm is not None:
-                        info.update({"planner_bpm": planned_bpm,
-                                     "planner_duration_s": planned_duration_s,
-                                     "requested_bpm": requested_bpm,
-                                     "tempo_adjusted_to_match_style": planned_bpm != requested_bpm})
+                        info.update(tempo)
                     return fitted, info
 
                 chosen = self._plan(request, p, run, progress, report, artifacts, accept_generated_score,

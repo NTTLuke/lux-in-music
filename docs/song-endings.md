@@ -20,6 +20,25 @@ Having `[Outro]` in the lyrics did not make a 5-minute composition fit in 3 minu
 
 ## Current behavior
 
+In the browser, **Automatic duration (recommended)** and **Complete arrangement**
+start with **Analyze duration**. The Create panel explains why model planning
+requires a wait, distinguishes queue time from analysis, and shows an indeterminate
+progress indicator and Cancel analysis. Analysis generates a score, not audio.
+
+The result gives the plan's estimated duration and BPM. It is not a promise of
+exact performance length. If the selected target is too short, **Use suggested
+duration** accepts the recommendation. **Edit lyrics** and **Edit style** help
+the user remove repeated choruses, shorten a verse, or request a compact intro
+and outro, then analyze again. An over-limit or supplied-score result explains
+the relevant choices. **Create** is a separate action after this review.
+
+Creation reuses the analyzed plan. Changes to text, style or model require a new
+analysis; choosing the offered duration does not. Plans remain in local server
+memory for 30 minutes, up to 32 results, and disappear on server restart. The UI
+asks for another analysis when that result is unavailable. Multiple variations
+reuse the same composition with different performance seeds. The CLI can still
+generate a target-mode song in one call using the existing validation path.
+
 - **Complete arrangement** sends `target_duration_s`. YuE2 uses full planning
   when Direct was requested. The browser selects Full score and explains this;
   choosing Direct switches to **Clip / hard limit**.

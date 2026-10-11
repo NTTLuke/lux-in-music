@@ -69,8 +69,14 @@ def health() -> dict:
             "setup_required": status["setup_required"]}
 
 
+def analyze_duration(params, profile, progress=None, cancel=None):
+    provider = get_provider(profile)
+    adapter = provider.adapter(profile)
+    return adapter.analyze_duration(params, lambda request: provider.run(profile, request, cancel), progress)
+
+
 def generate(params: GenerationParams, name: str | None = None, profile: dict | None = None, progress=None,
-             cancel=None) -> GenerationResult:
+             cancel=None, prepared=None) -> GenerationResult:
     profile = get_manager().snapshot(profile)
     provider = get_provider(profile)
     adapter = provider.adapter(profile)
@@ -82,6 +88,8 @@ def generate(params: GenerationParams, name: str | None = None, profile: dict | 
     try:
         if hasattr(adapter, "generate"):
             kwargs = {"progress": progress} if progress else {}
+            if prepared is not None:
+                kwargs["prepared"] = prepared
             data = adapter.generate(params, lambda request: provider.run(profile, request, cancel), **kwargs)
         else:
             data = provider.run(profile, adapter.request(params), cancel)

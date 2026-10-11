@@ -72,6 +72,19 @@ label, .label-row label { font-size: 12px; font-weight: 600; color: var(--muted)
 .meta { font-size: 11.5px; color: var(--dim); font-weight: 400; text-transform: none; letter-spacing: 0; }
 .value { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .hint { font-size: 11.5px; color: var(--dim); }
+.duration-guide { display: flex; flex-direction: column; gap: 12px; }
+.duration-guide > .btn { align-self: flex-start; }
+.duration-status { padding: 16px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--raise); }
+.duration-status h3 { margin: 0 0 10px; font-size: 15px; line-height: 1.4; }
+.duration-status p { margin: 8px 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.duration-status.ready { border-color: rgba(52,211,153,.4); }
+.duration-status.warning { border-color: var(--accent); }
+.duration-status.working { border-color: var(--line-2); }
+.duration-status progress { width: 100%; height: 6px; accent-color: var(--accent); margin: 8px 0; }
+.duration-status small { display: block; color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+.duration-facts, .duration-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.duration-facts span { font-size: 12px; background: var(--raise-2); border-radius: 5px; padding: 5px 8px; }
+.duration-status .duration-note { font-size: 12px; }
 .genre-templates { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--raise); }
 .genre-templates summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--muted); }
 .genre-templates summary .meta { float: right; }

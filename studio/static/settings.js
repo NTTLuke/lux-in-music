@@ -163,6 +163,7 @@ const Settings = (() => {
   }
 
   return { setup, route, options, capability, ready: () => Boolean(status.active),
+    profileKey: () => JSON.stringify(status.active),
     canEdit: (song) => Boolean(song?.can_edit),
     modeReady: (mode) => status.profiles.some((p) => p.id === status.separators[mode] && p.ready), refresh };
 })();

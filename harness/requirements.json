@@ -157,6 +157,19 @@
         "When every score is too long, diagnostics report the shortest measured duration and tempo among planner attempts.",
         "An all-vocal score that remains longer than the selected target is rejected before semantic composition."
       ]
+    },
+    {
+      "id": "duration-analysis-review",
+      "issue": "https://github.com/NTTLuke/lux-in-music/issues/18",
+      "description": "Explain arrangement analysis and help the user review a duration before creating audio.",
+      "status": "implemented",
+      "tests": ["tests.test_endings.DurationAnalysisTests", "tests.test_endings.DurationAnalysisApiTests"],
+      "acceptance": [
+        "Analysis prepares a checked score without creating audio and reports its nominal duration and BPM.",
+        "Short targets return a usable duration suggestion; over-limit and invalid plans are reported without a false estimate.",
+        "Generation reuses the checked plan and refuses changed inputs, model profiles and expired analysis IDs.",
+        "Fresh installs and unsupported providers cannot start analysis; running analysis can be cancelled without a song."
+      ]
     }
   ]
 }

@@ -2,6 +2,10 @@ import base64
 import copy
 import json
 import unittest
+import asyncio
+import time
+import threading
+import httpx
 from unittest.mock import patch
 
 from studio.adapters.yue2 import YuE2Adapter, YuE2Params
@@ -23,6 +27,134 @@ def score(vocal=None, instrumental=None, tempo=120, unit=16, meter="4/4"):
 
 def artifact(text, truncated="false", ident="score"):
     return {"id": ident, "payload": base64.b64encode(text.encode()).decode(), "meta": {"truncated": truncated}}
+
+
+class DurationAnalysisTests(unittest.TestCase):
+    def test_automatic_analysis_checks_tempo_and_reuses_exact_plan_without_replanning(self):
+        adapter, calls = YuE2Adapter(), []
+        planned = score(["C16"] * 94, tempo=73, unit=32, meter="2/4")
+        def run(request):
+            calls.append(copy.deepcopy(request))
+            if request["options"].get("stop_after") == "abc":
+                return {"artifacts": [artifact(planned)]}
+            return {"audio": tiny_audio(), "artifacts": [artifact(json.dumps([1] * 2820), ident="semantic")]}
+        params = GenerationParams(style="English, pop, 100 BPM", lyrics="Synthetic song", model_options={"cot": "full"})
+        result = adapter.analyze_duration(params, run)
+        summary = result["analysis"]
+        self.assertEqual((summary["status"], summary["planned_duration_s"], summary["recommended_target_s"]), ("ready", 112.8, 115))
+        self.assertEqual(len(calls), 1)
+        params.target_duration_s = 115
+        data = adapter.generate(params, run, prepared=result["prepared"])
+        self.assertEqual(len(calls), 3)  # one plan, one semantic pass, one render
+        self.assertEqual(calls[1]["options"]["abc"], result["prepared"]["score"])
+        self.assertTrue(data["generation"]["planning"]["analysis_reused"])
+        self.assertEqual(data["generation"]["planning"]["planner_bpm"], 73)
+
+    def test_short_target_returns_a_usable_recommendation_from_best_candidate(self):
+        plans = iter([score(["C16"] * n, tempo=100) for n in (57, 70, 80)])
+        adapter = YuE2Adapter()
+        params = GenerationParams(style="Pop", lyrics="Synthetic song", target_duration_s=120)
+        result = adapter.analyze_duration(params, lambda _: {"artifacts": [artifact(next(plans))]})
+        self.assertEqual(result["analysis"]["status"], "too_short")
+        self.assertEqual(result["analysis"]["recommended_target_s"], 140)
+        params.target_duration_s = 140
+        chosen, info = adapter.reuse_plan(params, result["prepared"])
+        self.assertAlmostEqual(inspect(chosen).duration_s, 136.8)
+        self.assertEqual(info["seed"], 1234)
+
+    def test_over_limit_and_supplied_scores_are_explained_without_audio(self):
+        adapter = YuE2Adapter()
+        long = adapter.analyze_duration(GenerationParams(style="Pop"),
+            lambda _: {"artifacts": [artifact(score(["C16"] * 200))]})
+        self.assertEqual(long["analysis"]["status"], "too_long")
+        self.assertIsNone(long["analysis"]["recommended_target_s"])
+        supplied = score()
+        result = adapter.analyze_duration(GenerationParams(style="100 BPM", target_duration_s=30,
+            model_options={"abc": supplied, "cot": "full"}), lambda _: self.fail("Supplied score must not use inference"))
+        self.assertEqual(result["analysis"]["recommended_target_s"], 40)
+        self.assertEqual(result["prepared"]["score"], supplied)
+        self.assertEqual(result["analysis"]["bpm"], 120)
+
+    def test_truncated_or_invalid_plans_produce_no_false_estimate(self):
+        for art in (artifact(score(), "true"), artifact("not a score")):
+            with self.assertRaises(ScoreError):
+                YuE2Adapter().analyze_duration(GenerationParams(style="Pop"), lambda _: {"artifacts": [art]})
+
+
+class DurationAnalysisApiTests(ModelFixtures):
+    def request(self, path, body=None, method="POST"):
+        from studio.app import app
+        async def send():
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://studio.test") as client:
+                return await client.request(method, path, json=body)
+        return asyncio.run(send())
+
+    def wait(self, job):
+        from studio import app as api
+        deadline = time.monotonic() + 5
+        while api.jobs[job["id"]]["status"] in {"queued", "running"} and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertNotIn(api.jobs[job["id"]]["status"], {"queued", "running"})
+        return api.jobs[job["id"]]
+
+    def test_analysis_queue_reuses_plan_and_refuses_changed_inputs_profile_and_expiry(self):
+        self.setup_profile()
+        from studio import app as api
+        adapter, calls = YuE2Adapter(), []
+        def run(profile, request, cancel=None):
+            calls.append(copy.deepcopy(request))
+            if request["options"].get("stop_after") == "abc":
+                return {"artifacts": [artifact(score())]}
+            return {"audio": tiny_audio(), "artifacts": [artifact(json.dumps([1] * 1000), ident="semantic")]}
+        body = {"style": "English, piano", "lyrics": "Synthetic song", "model_options": {"cot": "full"}}
+        with patch.object(self.provider, "adapter", return_value=adapter), patch.object(self.provider, "run", side_effect=run):
+            response = self.request("/api/duration-analysis", body)
+            self.assertEqual(response.status_code, 200)
+            job = self.wait(response.json())
+            self.addCleanup(api.jobs.pop, job["id"], None)
+            self.addCleanup(api._plans.pop, job["id"], None)
+            self.assertEqual(job["status"], "done", job.get("error"))
+            self.assertFalse(list(self.root.glob("outputs/*")), "Analysis must not write songs")
+            generate = {**body, "target_duration_s": 40, "analysis_id": job["id"]}
+            self.assertEqual(self.request("/api/generate", {**generate, "lyrics": "Changed synthetic text"}).status_code, 409)
+            self.assertEqual(self.request("/api/generate", {**generate, "target_duration_s": 10}).status_code, 422)
+            response = self.request("/api/generate", {**generate, "seed": 1235})
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertNotIn("_prepared", response.json())
+            finished = self.wait(response.json())
+            self.addCleanup(api.jobs.pop, finished["id"], None)
+            self.assertEqual(finished["status"], "done", finished.get("error"))
+            self.assertEqual(len(calls), 3)
+            self.assertTrue(finished["result"]["generation"]["planning"]["analysis_reused"])
+            self.assertEqual(finished["result"]["generation"]["planning"]["seed"], 1234)
+            self.assertEqual(finished["result"]["params"]["seed"], 1235)
+            self.assertNotIn("_prepared", next(j for j in self.request("/api/jobs", method="GET").json() if j["id"] == finished["id"]))
+            self.setup_profile("bf16", "f32")
+            self.assertEqual(self.request("/api/generate", generate).status_code, 409)
+            api._plans[job["id"]]["created"] -= api.PLAN_TTL_S + 1
+            self.assertIn("expired", self.request("/api/generate", generate).json()["detail"])
+
+    def test_fresh_install_and_unsupported_provider_cannot_start_analysis(self):
+        self.assertEqual(self.request("/api/duration-analysis", {"style": "Piano"}).status_code, 409)
+        self.assertFalse(self.requests)
+        self.setup_profile()
+        self.assertEqual(self.request("/api/duration-analysis", {"style": "Piano"}).status_code, 422)
+
+    def test_running_analysis_can_be_cancelled_without_a_plan_or_song(self):
+        self.setup_profile()
+        from studio import app as api
+        self.provider.hold_run = threading.Event()
+        with patch.object(self.provider, "adapter", return_value=YuE2Adapter()):
+            job = self.request("/api/duration-analysis", {"style": "Piano"}).json()
+            self.addCleanup(api.jobs.pop, job["id"], None)
+            deadline = time.monotonic() + 5
+            while not self.provider.calls and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertTrue(self.provider.calls)
+            self.assertEqual(self.request(f"/api/jobs/{job['id']}/cancel").status_code, 200)
+            self.assertEqual(self.wait(job)["status"], "cancelled")
+            self.assertNotIn(job["id"], api._plans)
+            self.assertFalse(list(self.root.glob("outputs/*")))
 
 
 class ScoreDurationTests(unittest.TestCase):

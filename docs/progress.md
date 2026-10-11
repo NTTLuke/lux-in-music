@@ -1,8 +1,43 @@
 # Project handoff
 
+## Current work: review a duration estimate before creating audio
+
+Branch: `feat/duration-analysis`, related to issue #18.
+
+- Models declare duration-analysis support. YuE2 offers automatic duration and
+  a manual target, with an explicit analysis/review step before audio generation.
+  The Create panel explains model processing and first-use loading, shows queued
+  and running states with indeterminate progress, and allows cancellation.
+- The result shows the plan's nominal duration and BPM. A short target offers
+  Use suggested duration, Edit lyrics and Edit style, with specific suggestions.
+  Over-limit and supplied-score cases have their own messages. Changes to inputs
+  or model invalidate the result; expired results ask for another analysis.
+- Analysis runs only score planning in the existing queue. A bounded in-memory
+  cache retains the plan for 30 minutes. Generation validates its inputs/profile
+  and reuses it, including for performance variations. Queued jobs keep a copy.
+- Added permanent repository guidance to keep private lyrics/prompts out of
+  commits, issues, PRs, comments and tests. All new fixtures use synthetic text.
+- Verification so far: seven new offline adapter/API tests cover estimates,
+  BPM, plan reuse, short/over-limit targets, supplied/invalid scores, invalidation,
+  expiry, capability/setup gates and cancellation. Browser checks cover the wait,
+  suggested duration, automatic mode, stale/expired results, reused-plan requests
+  and mobile layout; screenshots inspected. No JavaScript errors.
+- Limits: the estimate describes this plan, not guaranteed lyric adherence or
+  exact audio duration. The current complete-song target limit is 330 seconds.
+  Closing/reloading the browser requires a fresh analysis; server restart and
+  cache expiry also require one. No word-count formula is presented as a forecast.
+- Native check with synthetic input: Q8_0/F16, seed 20261011, requested 120 BPM.
+  Analysis took 8.06 s; its 37.00 s plan suggested a 40 s target. Creation reused
+  that score and took 25.18 s; final WAV 36.44 s, EOS observed, no truncation.
+  Exactly one ABC call, one semantic call and one audio call. Isolated runtime
+  and local artifacts: `outputs/checks/duration-analysis/20261011-184342/`.
+  Listening acceptance is pending; EOS is not claimed as musical acceptance.
+- Baseline and full checks passed (103 application test executions), along with the browser
+  flow. Next step: review this feature and listen to the synthetic smoke-test WAV.
+
 ## Current work: Complete Arrangement rejects a near-target vocal plan
 
-Branch: `fix/hip-hop-arrangement-length`, issue #18.
+Branch: `fix/hip-hop-arrangement-length-clean`, issue #18; included in this feature branch.
 
 - Reproduced the supplied style and lyrics with the installed YuE2 Q8_0/F16
   profile, seed 1234 and 240 s target. It completed with EOS: 154.56 s audio from
@@ -30,7 +65,8 @@ Branch: `fix/hip-hop-arrangement-length`, issue #18.
 - Limits: tempo is changed only when the style names one unambiguous BPM; an
   unspecified or ranged BPM keeps the planner tempo. Long vocal passages may
   still need a longer target or shorter lyrics. The new 112.76 s result has not
-  received the user's listening acceptance.
+  received a listening review for that saved test WAV. The user confirmed that
+  the fixed workflow works in their own test.
 - Next step: update issue #18 and review the resulting PR.
 
 ## Current work: delete a song
