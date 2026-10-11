@@ -33,7 +33,12 @@ Branch: `feat/duration-analysis`, related to issue #18.
   and local artifacts: `outputs/checks/duration-analysis/20261011-184342/`.
   Listening acceptance is pending; EOS is not claimed as musical acceptance.
 - Baseline and full checks passed (103 application test executions), along with the browser
-  flow. Next step: review this feature and listen to the synthetic smoke-test WAV.
+  flow. The user approved PR #20 for merge. README now explains the wait,
+  analysis/review/create steps, duration modes and suggested actions without
+  including lyric text or style prompts. It distinguishes main from v0.2.0,
+  which predates this feature. Final documentation baseline checks passed.
+  Next step: include this feature in the next numbered release; listening
+  acceptance for the synthetic smoke-test WAV remains pending.
 
 ## Current work: Complete Arrangement rejects a near-target vocal plan
 
