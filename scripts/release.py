@@ -540,6 +540,14 @@ def main() -> None:
     if dirty:
         die("the working tree is not clean:\n  " + "\n  ".join(dirty))
     detail("working tree clean")
+    # uv build writes its own dist/.gitignore that hides the artifacts; on a fresh
+    # clone dist/ does not exist yet, so create the same protection here before the
+    # guard below, which would otherwise refuse every first release.
+    DIST.mkdir(exist_ok=True)
+    dist_ignore = DIST / ".gitignore"
+    if not dist_ignore.exists():
+        dist_ignore.write_text("*\n", encoding="utf-8")
+        detail("created dist/.gitignore so the artifacts stay out of Git")
     if run(["git", "check-ignore", "-q", "dist/"], check=False).returncode != 0:
         die("dist/ is not ignored by Git; the release artifacts would be committed")
     if run(["git", "rev-parse", "-q", "--verify", f"refs/tags/{tag}"], check=False).returncode == 0:
