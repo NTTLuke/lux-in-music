@@ -10,11 +10,11 @@
   check the stop request before each engine call, also after an engine restart.
 - Verification: offline API test with a blocking fake provider (queued and
   running jobs, no output written), a provider test for a stop during engine
-  start, and a browser check for the stop button. Full checks pass.
-- Limits: not yet tried against a real audio.cpp generation. The next job pays
-  the model load again. Running separation and stem edits cannot be stopped yet;
+  start, and a browser check for the stop button. Full checks pass. A real
+  audio.cpp generation was stopped manually in `./studio.sh` on macOS (Metal).
+- Limits: the next job pays the model load again. Running separation and stem edits cannot be stopped yet;
   they run several engine calls that do not check the stop request.
-- Next step: stop a real generation in `./studio.sh` and confirm the next job runs.
+- Next step: allow stopping running separations and stem edits.
 
 ## Current work: manual release build
 
