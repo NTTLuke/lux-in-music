@@ -1,6 +1,6 @@
 [project]
 name = "lux-in-music"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local generative music studio using models compatible with audio.cpp"
 requires-python = ">=3.11"
 dependencies = [

@@ -7,6 +7,17 @@ Entries are written by `./release.sh` from the merged pull requests and the
 commits on `main`. Each release also appears on the
 [releases page](https://github.com/NTTLuke/lux-in-music/releases).
 
+## [0.3.0] - 2026-10-11
+
+### Added
+
+- Review song duration before creating audio ([#20](https://github.com/NTTLuke/lux-in-music/pull/20))
+- Set up models in parallel, add instrumental songs and song delete ([#17](https://github.com/NTTLuke/lux-in-music/pull/17))
+
+### Documentation
+
+- docs: Prepare the v0.3.0 installation guide
+
 ## [0.2.0] - 2026-10-11
 
 ### Added
