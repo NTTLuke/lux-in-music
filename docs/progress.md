@@ -1,5 +1,27 @@
 # Project handoff
 
+## Current work: complete songs shorter than the target
+
+- Observed: three target-mode jobs failed with "did not finish near the requested
+  duration" although every composing attempt ended with EOS. Plans were shorter
+  than the target (177.8/256.5/228.8 s for 240/330/330 s targets), and the model
+  followed them (175.7/254.8/228.8 s). Fitting only shortens plans, and the
+  acceptance check rejected the short side too, after two composing passes.
+- Now a complete stream within max(15 s, 12.5%) of the planned duration is
+  accepted when it is shorter than the target, rendered, labelled **Shorter than
+  target** and explained. Endings far before the plan, capped streams and long
+  streams are still rejected. All three failures above would be accepted.
+- Verification: ending tests (accepted near the plan, rejected far before it) and
+  a browser check for the badge. Full checks pass. Real generation
+  `20261011-092721-lux-in-tenebris`: 330 s target, 221.3 s plan, 219.2 s song
+  ended by the model, accepted at the first attempt and labelled shorter than
+  target. The listening check confirmed a correct musical ending.
+- Observed from the saved plans: vocal bars alone take 158-212 s for 201-232
+  words, so fitting cannot get these lyrics near 60-120 s. Plans followed a BPM
+  written in the style (110 BPM requested, 108-110 planned).
+- Next step: decide whether to test tempo scaling of the plan to shorten songs
+  while keeping all lyrics.
+
 ## Current work: FLAC and MP3 downloads
 
 - The song details drawer offers WAV, FLAC and MP3. `GET /api/export/{song}?format=flac|mp3`

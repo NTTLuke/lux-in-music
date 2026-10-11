@@ -162,6 +162,8 @@ class YuE2Adapter:
             # known to have hit the cap; retries are deliberately bounded.
             report["semantic_attempts"] = []
             accepted = None
+            planned = report["planning"]["planned_duration_s"]
+            tolerance = lambda seconds: max(15, seconds * 0.125)
             for attempt in range(2):
                 if progress:
                     progress(f"Composing and checking the ending ({attempt + 1}/2)")
@@ -176,8 +178,12 @@ class YuE2Adapter:
                     artifacts.append({**semantic, "id": f"semantic-attempt-{attempt + 1}"})
                     codes = json.loads(base64.b64decode(semantic["payload"]))
                     entry["duration_s"] = len(codes) / SEMANTIC_FPS
-                    entry["target_match"] = abs(entry["duration_s"] - p.target_duration_s) <= max(15, p.target_duration_s * 0.125)
-                    if ending["status"] == "model_end" and entry["target_match"]:
+                    entry["target_match"] = abs(entry["duration_s"] - p.target_duration_s) <= tolerance(p.target_duration_s)
+                    # Planning only shortens, so short lyrics give a short plan. Accept a complete
+                    # song that follows its plan; an ending far before the plan dropped sections.
+                    entry["shorter_than_target"] = (entry["duration_s"] < p.target_duration_s and not entry["target_match"]
+                                                    and abs(entry["duration_s"] - planned) <= tolerance(planned))
+                    if ending["status"] == "model_end" and (entry["target_match"] or entry["shorter_than_target"]):
                         accepted = (semantic, codes, entry)
                 report["semantic_attempts"].append(entry)
                 if accepted:
@@ -208,6 +214,9 @@ class YuE2Adapter:
         # Supplied ABC is not exported by the native runtime, so retain our plan.
         data["artifacts"] = artifacts + data.get("artifacts", [])
         report.update(self.ending(data))
+        if report.get("shorter_than_target"):
+            report["message"] += (f" It is shorter than the {p.target_duration_s:.0f}s target: the arrangement for these"
+                                  f" lyrics lasts about {planned:.0f}s. Add sections for a longer song.")
         data["generation"] = report
         return data
 
