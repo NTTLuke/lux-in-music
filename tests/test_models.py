@@ -297,6 +297,24 @@ class DownloadTests(ModelFixtures):
         self.assertIn("disk space", job["error"])
         self.assertFalse(self.requests)
 
+    def test_different_models_set_up_in_parallel_but_shared_files_wait(self):
+        self.provider.hold_probe = threading.Event()
+        p = self.profile(); first = self.manager.start("test-model", "q8_0", "f16", p["license_review_id"], True)
+        with self.assertRaisesRegex(ValueError, "these model files"):
+            self.manager.start("test-model", "bf16", "f32", p["license_review_id"], True)
+        shared = copy.deepcopy(self.catalog[0])
+        shared.update(id="shared-separator", task="sep", mode_id="vocals", vaes={}, default_vae=None)
+        separate = dict(copy.deepcopy(shared), id="other-separator", mode_id="4stems", install_dir="other")
+        self.manager.catalog.update({shared["id"]: shared, separate["id"]: separate})
+        with self.assertRaisesRegex(ValueError, "these model files"):  # same config.json path
+            self.manager.start(shared["id"], "q8_0", None, self.manager.profile(shared["id"])["license_review_id"], True)
+        second = self.manager.start(separate["id"], "q8_0", None, self.manager.profile(separate["id"])["license_review_id"], True)
+        self.provider.hold_probe.set()
+        for thread in self.manager.threads: thread.join(4)
+        self.assertEqual([self.manager.jobs[j["id"]]["status"] for j in (first, second)], ["done", "done"])
+        self.assertEqual(self.manager.separator("4stems")["model_id"], "other-separator")
+        self.assertFalse(self.manager.status()["setup_required"])
+
 
 class ProviderBoundaryTests(ModelFixtures):
     def test_separation_uses_the_selected_profiles_audio_format(self):
@@ -387,6 +405,28 @@ class SettingsApiTests(ModelFixtures):
         self.assertTrue(self.request("GET", "/api/settings/status").json()["setup_required"])
         self.assertEqual(self.request("GET", "/api/library").json(), [])
         self.assertEqual(self.request("POST", "/api/generate", {"lyrics": "A song", "style": "Piano"}).status_code, 409)
+
+    def test_deleting_a_song_removes_only_its_files_and_waits_for_its_jobs(self):
+        from studio import app as api, separate
+        out = engine.OUTPUT_DIR
+        stems_patch = patch.object(separate, "STEMS_DIR", out / "stems"); stems_patch.start(); self.addCleanup(stems_patch.stop)
+        for name in ["a.wav", "a.abc", "a.plan-1.abc", "a.semantic.json", "a.b.wav", "a.b.json"]:
+            (out / name).write_text("x")
+        (out / "a.json").write_text(json.dumps({"artifacts": {"score": "a.abc", "plan-1": "a.plan-1.abc", "bad": "../outside"}}))
+        (out / "stems/a/vocals").mkdir(parents=True); (out / "stems/a/vocals/vocals.wav").write_text("x")
+        api.jobs["held"] = {"id": "held", "kind": "separate", "status": "queued", "params": {"song": "a"}}
+        self.addCleanup(api.jobs.pop, "held", None)
+        self.assertEqual(self.request("DELETE", "/api/songs/a").status_code, 409)
+        self.assertTrue((out / "a.wav").exists())
+        api.jobs["held"]["status"] = "done"
+        self.assertEqual(self.request("DELETE", "/api/songs/a").status_code, 200)
+        self.assertEqual(sorted(p.name for p in out.rglob("*")), ["a.b.json", "a.b.wav", "stems"])
+        self.assertEqual(self.request("DELETE", "/api/songs/a").status_code, 404)
+        self.assertEqual(self.request("DELETE", "/api/songs/..").status_code, 404)
+
+    def test_instrumental_is_refused_by_a_model_without_the_capability(self):
+        self.setup_profile()
+        self.assertEqual(self.request("POST", "/api/generate", {"style": "Piano", "instrumental": True}).status_code, 422)
 
     def test_queued_and_running_generation_can_be_stopped(self):
         self.setup_profile()

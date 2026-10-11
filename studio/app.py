@@ -5,6 +5,8 @@
 
 import json
 import queue
+import re
+import shutil
 import threading
 import time
 import uuid
@@ -176,7 +178,10 @@ def cancel_model_setup(job_id: str):
 def api_generate(params: GenerationParams):
     try:
         profile = get_manager().snapshot()
-        params = get_provider(profile).adapter(profile).normalize(params)
+        adapter = get_provider(profile).adapter(profile)
+        if params.instrumental and not adapter.capabilities.get("instrumental"):
+            raise ValueError("The selected model cannot generate instrumental music")
+        params = adapter.normalize(params)
     except SetupRequired as error:
         raise HTTPException(409, str(error)) from error
     except ValueError as error:
@@ -253,6 +258,27 @@ def api_library():
     items = [m for p in engine.OUTPUT_DIR.glob("*.json")
              if not p.name.endswith(".semantic.json") and (m := _load_meta(p))]
     return sorted(items, key=lambda m: m.get("created", ""), reverse=True)
+
+
+@app.delete("/api/songs/{song}")
+def api_delete_song(song: str):
+    meta = engine.OUTPUT_DIR / f"{song}.json"
+    if not re.fullmatch(r"[\w.-]+", song) or song.startswith(".") or not meta.exists():
+        raise HTTPException(404)
+    with _jobs_lock:
+        if any(j["status"] in {"queued", "running"} and j["params"].get("song") == song for j in jobs.values()):
+            raise HTTPException(409, "Wait for this song's stem jobs to finish or stop them first.")
+    try:
+        names = list(json.loads(meta.read_text()).get("artifacts", {}).values())
+    except json.JSONDecodeError:
+        names = []
+    shutil.rmtree(separate.STEMS_DIR / song, ignore_errors=True)
+    # Named files only: a glob on the song name could match another song with a longer name.
+    # The metadata goes last, so a failed delete still lists the song for another try.
+    for name in [f"{song}.wav", f"{song}.semantic.json", *names, meta.name]:
+        if Path(name).name == name:
+            (engine.OUTPUT_DIR / name).unlink(missing_ok=True)
+    return {"ok": True}
 
 
 class SeparateRequest(BaseModel):

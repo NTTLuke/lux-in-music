@@ -5,10 +5,10 @@ const Settings = (() => {
   const choices = new Map(), accepted = new Set(), declined = new Set();
   let error = "", lastCompleted = "", loading = false;
   const sizes = (bytes) => `${(bytes / 1e9).toFixed(2)} GB`;
-  const busy = () => status.jobs.some((j) => ["queued", "running"].includes(j.status));
   const visible = () => location.hash === "#/settings";
   const capability = () => status.active?.capabilities || {};
   const running = (job) => job && ["queued", "running"].includes(job.status);
+  const busy = (model) => running(latestJob(model));
   const latestJob = (model) => status.jobs.slice().reverse().find((job) => model.choices.some((c) => c.id === job.profile_id));
   const stageLabel = (job) => ({ queued: "Waiting…", downloading: "Downloading…", verifying: "Checking files…", testing: "Testing on this computer…" }[job.stage] || "Preparing…");
 
@@ -32,6 +32,8 @@ const Settings = (() => {
     for (const button of $("cot").children) button.hidden = !cap.planning?.includes(button.dataset.v);
     if (cap.planning?.length && !cap.planning.includes(state.cot)) { state.cot = cap.planning[0]; setSegmented("cot", state.cot); }
     $("abc").closest(".field").hidden = !cap.abc;
+    $("instrumental-toggle").hidden = !cap.instrumental;
+    if (!cap.instrumental && $("instrumental").checked) { $("instrumental").checked = false; updateLyricsCount(); }
     $("len").closest(".field").hidden = !cap.max_duration_s && !cap.target_duration_s;
     updateDurationUI();
     for (const slider of SLIDERS) $(slider.id).closest(".slider").hidden = !cap.options?.includes(slider.id);
@@ -98,9 +100,9 @@ const Settings = (() => {
         ${licensed ? "" : '<p class="error">License information is incomplete. Downloads are unavailable until this release is reviewed.</p>'}
         <label class="license-accept"><input type="checkbox" id="license-${model.id}" data-license="${choice.license_review_id}" ${checked ? "checked" : ""} ${licensed ? "" : "disabled"}> I have reviewed and accept these component license terms.</label></div>
         <p class="hint model-verification">${choice.ready ? active ? `Verified · Active ${model.task === "gen" ? "generation" : "separation"} model` : "Verified on this computer" : choice.installed ? "Files found — verification required" : "Not installed"} · Release ${esc(model.revision.slice(0, 12))}</p>
-        <div class="model-actions"><button type="button" class="btn primary" id="setup-${model.id}" data-setup="${model.id}" data-action="${action}" ${busy() || !checked || !licensed || readyActive ? "disabled" : ""}>${label}</button></div>
+        <div class="model-actions"><button type="button" class="btn primary" id="setup-${model.id}" data-setup="${model.id}" data-action="${action}" ${busy(model) || !checked || !licensed || readyActive ? "disabled" : ""}>${label}</button></div>
         <div id="progress-${model.id}" class="model-progress" role="status" aria-live="polite" hidden></div>
-        ${model.delivery !== "external" && choice.installed ? `<details class="model-maintenance"><summary>Maintenance</summary><button type="button" class="btn" id="repair-${model.id}" data-setup="${model.id}" data-action="download" ${busy() || !checked || !licensed ? "disabled" : ""}>Repair / recheck files</button></details>` : ""}</article>`;
+        ${model.delivery !== "external" && choice.installed ? `<details class="model-maintenance"><summary>Maintenance</summary><button type="button" class="btn" id="repair-${model.id}" data-setup="${model.id}" data-action="download" ${busy(model) || !checked || !licensed ? "disabled" : ""}>Repair / recheck files</button></details>` : ""}</article>`;
     }).join("");
     progress();
     if (focused) document.getElementById(focused)?.focus({ preventScroll: true });

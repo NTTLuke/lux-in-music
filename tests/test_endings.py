@@ -112,6 +112,34 @@ class EndingGenerationTests(unittest.TestCase):
             self.assertTrue(all(c["options"]["stop_after"] == "abc" for c in calls))
             self.assertEqual(len(caught.exception.diagnostics["artifacts"]), 3)
 
+    def test_instrumental_mutes_the_planned_vocal_line_before_rendering(self):
+        planned = score(['"Am"C8D8'] + ["Z"] * 3 + ["C16"] * 4)
+        calls = []
+        def run(request):
+            calls.append(copy.deepcopy(request))
+            return {"artifacts": [artifact(planned)]} if request["options"].get("stop_after") == "abc" else {"audio": tiny_audio(), "artifacts": []}
+        result = YuE2Adapter().generate(self.params(instrumental=True, max_duration_s=30), run)
+        self.assertEqual([c["options"].get("stop_after") for c in calls], ["abc", None])
+        self.assertEqual((calls[1]["lyrics"], calls[1]["options"]["cot"]), ("[instrumental]", "full"))
+        rendered = inspect(calls[1]["options"]["abc"])
+        self.assertEqual([b.vocal for b in rendered.bars], ['"Am"z16'] + ["z16"] * 7)
+        self.assertEqual([b.instrumental for b in rendered.bars], [b.instrumental for b in inspect(planned).bars])
+        saved = next(a for a in result["artifacts"] if a["id"] == "score")
+        self.assertEqual(base64.b64decode(saved["payload"]).decode(), calls[1]["options"]["abc"])
+
+    def test_instrumental_target_can_shorten_bars_the_planner_gave_vocals(self):
+        calls = []
+        def run(request):
+            calls.append(copy.deepcopy(request))
+            if request["options"].get("stop_after") == "abc":
+                return {"artifacts": [artifact(score(["C16", "Z"] * 12))]}  # unfittable with sung bars
+            return {"audio": tiny_audio(), "artifacts": [artifact(json.dumps([1] * 750),
+                "false" if request["options"].get("stop_after") == "semantic" else "true", "semantic")]}
+        YuE2Adapter().generate(self.params(instrumental=True, target_duration_s=30), run)
+        rendered = inspect(calls[1]["options"]["abc"])
+        self.assertEqual(rendered.duration_s, 30)
+        self.assertTrue(all(b.vocal == "z16" for b in rendered.bars))
+
     def test_supplied_score_is_not_modified_and_skips_planner(self):
         text = score()
         calls = []

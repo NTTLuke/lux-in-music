@@ -123,6 +123,17 @@ def inspect(text):
     return Score(lines[:8], bars, int(tempo[1]), seconds)
 
 
+def mute_vocals(text):
+    """Rest every vocal note, keeping chord symbols. The base model sings planned vocal notes even
+    with [instrumental] lyrics, and leaves the vocal stem silent when the plan has none."""
+    score = inspect(text)
+    meter, unit = re.fullmatch(r"M:(\d+)/(\d+)", score.header[2]), re.fullmatch(r"L:1/(\d+)", score.header[3])
+    units = int(meter[1]) * int(unit[1]) // int(meter[2])
+    for bar in score.bars:
+        bar.vocal = "".join(re.findall(r'"[^"\n]*"', bar.vocal)) + f"z{units}"
+    return score.text()
+
+
 def fit(text, target_s):
     score = inspect(text)
     original_s = score.duration_s

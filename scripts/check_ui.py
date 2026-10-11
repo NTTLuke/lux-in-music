@@ -6,6 +6,7 @@ Requires Playwright and an installed Chrome. No model or browser download occurs
 import argparse
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -155,8 +156,9 @@ def main():
                     def duration_capability(route):
                         data = route.fetch().json()
                         data["active"]["capabilities"].update(target_duration_s=330, min_target_duration_s=30,
-                            max_duration_s=360, planning=["off", "melody", "full"])
+                            max_duration_s=360, planning=["off", "melody", "full"], instrumental=True)
                         route.fulfill(json=data)
+                    expect(page.locator("#instrumental-toggle")).to_be_hidden()  # the fake provider has no instrumental mode
                     page.route("**/api/settings/status", duration_capability)
                     page.locator("#nav-create").click()
                     page.evaluate("Settings.refresh(true)")
@@ -177,6 +179,17 @@ def main():
                     body = generation_request.value.post_data_json
                     assert body["target_duration_s"] == 240 and "max_duration_s" not in body, body
                     assert body["model_options"]["cot"] == "full", body
+                    assert "instrumental" not in body, body
+                    page.locator("#instrumental-toggle").click()
+                    expect(page.locator("#lyrics")).to_be_hidden()
+                    expect(page.locator("#lyrics-advice")).to_contain_text("No vocals")
+                    page.route("**/api/generate", lambda route: route.fulfill(json={}))
+                    with page.expect_request("**/api/generate") as instrumental_request:
+                        page.locator("#go").click()
+                    assert instrumental_request.value.post_data_json["instrumental"] is True
+                    page.unroute("**/api/generate")
+                    page.locator("#instrumental-toggle").click()
+                    expect(page.locator("#lyrics")).to_be_visible()
                     page.evaluate("state.library[0].generation = {status:'truncated', message:'Stopped at the hard limit. The song may be unfinished.'}; render()")
                     expect(page.locator(".badge").filter(has_text="Unfinished · limit reached")).to_be_visible()
                     page.evaluate("state.library[0].generation = {status:'model_end', shorter_than_target:true, target_duration_s:330}; state.library[0].duration_s = 229; render()")
@@ -188,7 +201,13 @@ def main():
                         expect(link).to_have_text(fmt.upper())
                         exported = page.request.get(urljoin(page.url, link.get_attribute("href")))
                         assert exported.ok and exported.headers["content-type"] == media and exported.body(), fmt
-                    page.locator("#drawer [data-act='close']").click()
+                    page.once("dialog", lambda dialog: dialog.dismiss())
+                    page.locator("#drawer [data-act='ddelete']").click()
+                    expect(page.locator("#drawer")).to_have_class(re.compile("open"))
+                    page.once("dialog", lambda dialog: dialog.accept())
+                    page.locator("#drawer [data-act='ddelete']").click()
+                    expect(page.locator(".song[data-name='legacy-song']")).to_have_count(0)
+                    expect(page.locator("#drawer")).not_to_have_class(re.compile("open"))
                     page.evaluate("state.jobs = [{id:'held', kind:'generate', status:'running', params:{title:'Held', style:'Piano'}, created:0, started:0, now:0, eta_s:60}]; state.jobsAt = Date.now(); render()")
                     with page.expect_request("**/api/jobs/held/cancel") as stop_request:
                         page.locator(".song[data-job='held'] [data-act='cancel']").click()
@@ -216,7 +235,7 @@ def main():
                     browser.close()
                 print(json.dumps({"settings_first": True, "license_gate": True, "independent_precision": True,
                                   "fake_download_and_activation": True, "capability_controls": True,
-                                  "generation_and_library": True, "five_templates_without_generation": True, "templates_share_techno_lyrics": True, "templates_preserve_title_and_settings": True, "wider_create_and_responsive_layout": True, "duration_target_and_cap": True, "lyric_advice_and_truncation_badge": True, "shorter_than_target_badge": True, "mobile_navigation": True, "external_without_weights": True, "verification_survives_reload_and_dropdown": True, "separator_disabled_when_active": True, "card_progress_and_errors_only": True, "flac_and_mp3_downloads": True, "generation_stop_button": True, "creator_terms_visible": True, "mixer_editable_and_legacy_songs": True, "unresolved_license_blocked": True, "javascript_errors": errors}))
+                                  "generation_and_library": True, "five_templates_without_generation": True, "templates_share_techno_lyrics": True, "templates_preserve_title_and_settings": True, "wider_create_and_responsive_layout": True, "duration_target_and_cap": True, "lyric_advice_and_truncation_badge": True, "instrumental_switch": True, "shorter_than_target_badge": True, "mobile_navigation": True, "external_without_weights": True, "verification_survives_reload_and_dropdown": True, "separator_disabled_when_active": True, "card_progress_and_errors_only": True, "flac_and_mp3_downloads": True, "delete_song_with_confirmation": True, "generation_stop_button": True, "creator_terms_visible": True, "mixer_editable_and_legacy_songs": True, "unresolved_license_blocked": True, "javascript_errors": errors}))
             finally:
                 server.terminate()
                 try: server.wait(timeout=10)

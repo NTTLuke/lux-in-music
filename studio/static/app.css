@@ -227,6 +227,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px;
 .btn:hover { background: var(--raise-2); }
 .btn.primary { background: white; color: #111; border-color: white; }
 .btn.primary svg { fill: #111; stroke: none; }
+.btn.danger { color: var(--err); }
+.btn.danger:hover { border-color: var(--err); }
 .btn svg { width: 16px; height: 16px; }
 .d-sec h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 0 0 8px; }
 .d-lyrics { white-space: pre-wrap; font-size: 13.5px; line-height: 1.7; color: #d8d8e4; background: var(--raise); border: 1px solid var(--line); border-radius: 7px; padding: 14px 16px; }

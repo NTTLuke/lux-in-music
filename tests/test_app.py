@@ -69,6 +69,12 @@ class RequestBoundaryTests(unittest.TestCase):
         self.assertEqual(request["options"]["semantic_min_tokens"], "100")
         self.assertEqual(request["options"]["semantic_max_tokens"], "100")
 
+    def test_lyrics_are_optional_and_instrumental_sends_the_upstream_tag(self):
+        self.assertEqual(GenerationParams(style="Piano").to_request()["lyrics"], "")
+        request = self.params(instrumental=True).to_request()
+        self.assertEqual(request["lyrics"], "[instrumental]")
+        self.assertNotIn("instrumental", request["options"])
+
     def test_conflicting_token_limits_and_unsupported_score_route_fail(self):
         with self.assertRaises(ValidationError):
             self.params(semantic_min_tokens=201, semantic_max_tokens=200)

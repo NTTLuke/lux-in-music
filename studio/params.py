@@ -8,7 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field
 class GenerationParams(BaseModel):
     model_config = ConfigDict(extra="allow")  # legacy flat options are normalized by adapters
     title: str | None = Field(None, max_length=80)
-    lyrics: str = Field(..., min_length=1)
+    lyrics: str = ""
+    instrumental: bool = False
     style: str = Field(..., min_length=1)
     seed: int = Field(1234, ge=0, lt=2**63)
     max_duration_s: float | None = Field(None, gt=0)

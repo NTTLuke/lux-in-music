@@ -1,5 +1,60 @@
 # Project handoff
 
+## Current work: delete a song
+
+- Song details have a Delete button with a confirmation. `DELETE /api/songs/{song}`
+  removes the WAV, metadata, the artifacts listed in the metadata, the semantic
+  token cache and `stems/<song>/`. Files are removed by name, never by a pattern,
+  so a song named `a.b` survives deleting `a`. The metadata goes last, so a failed
+  delete still lists the song. Deleting the playing song stops the player.
+- A queued or running separation/stem edit of the song blocks the delete (409).
+- Verification: API test (only the song's files go, sibling kept, job blocks,
+  unsafe names refused) and a browser check (cancel keeps it, confirm removes it).
+- Limits: no undo or trash. Failed generation reports (`.failure-report`) are not
+  library songs and are not touched.
+
+## Current work: optional lyrics and instrumental songs
+
+- Lyrics are optional in the API, CLI (`--lyrics` no longer required) and UI.
+  Empty lyrics are sent as-is; audio.cpp only requires a style.
+- New Instrumental switch (Create page, `--instrumental` in the CLI), shown only
+  when the model declares the `instrumental` capability.
+- Observed with YuE2 Q8_0, 30 s clips, vocal stem measured with BS-RoFormer:
+  `[instrumental]` lyrics alone were not enough. Direct: vocals at -24 dB RMS
+  (mix -17.7 dB). Planned scores with vocal notes were sung: Full score -29 dB,
+  Melody -30 dB. A score with no vocal notes gave -80 dB.
+- So YuE2 instrumental songs plan a score, replace the vocal line with rests,
+  and render that score. Same prompts after the change: Full score silent
+  (digital zero), Melody -70 dB, 60 s complete arrangement -77 dB, 60.6 s,
+  ended by the model. Muting happens before duration fitting, otherwise the
+  planner's vocal bars cannot be shortened (the first 60 s attempt failed).
+- Verification: adapter tests (muted score rendered and saved, target fitting
+  after muting), request and API capability tests, browser check of the switch.
+  Full checks pass. Listening check: not done yet; files are
+  `outputs/instrumental-v2-*.wav`.
+- Limits: instrumental needs planning, so it is slower (63 s for a 30 s clip
+  with Full score). Edit "new" variations of instrumental songs keep the muted
+  score, so they change the performance but not the notes. No requirement
+  ledger entry yet: it needs an issue link.
+- Next step: listening check, then decide whether to offer the upstream
+  instrumental LoRA as an optional, license-gated download.
+
+## Current work: parallel model setup in Settings
+
+- Before: one model setup at a time; every Settings card was disabled while any
+  download ran. Now each model has its own setup, so different models download
+  and verify in parallel. Only that model's buttons are disabled.
+- A new setup is refused while another running setup is for the same model or
+  writes any of the same files (the separation models share `sep/`).
+  Runtime tests still run one at a time through the provider lock.
+- Verification: a model test with two parallel setups and two refused ones;
+  full checks and the browser flow pass. No real parallel download was run.
+- Limits: the free-space check is per setup, so parallel downloads can
+  together need more space than is free. A full disk fails the download and
+  keeps the resumable `.part` file.
+- Next step: reserve the bytes of running setups in the space check if this
+  happens in practice.
+
 ## Current work: choose the listening address
 
 - `./studio.sh --host <address>` (and `python -m studio.launch --host`) sets the

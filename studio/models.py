@@ -33,6 +33,7 @@ class ModelManager:
         self.lock = threading.RLock()
         self.jobs = {}
         self.events = {}
+        self.claims = {}  # job_id -> (model_id, file paths) for running setups
         self.threads = []
         self.state_error = None
         try:
@@ -268,8 +269,10 @@ class ModelManager:
         with self.lock:
             if self.state_error:
                 raise SetupRequired(self.state_error)
-            if any(j["status"] in {"queued", "running"} for j in self.jobs.values()):
-                raise ValueError("Another model setup is running. Wait or cancel it first.")
+            paths = {str(Path(profile["root"]) / f["path"]) for f in profile["files"]}
+            for job_id, (other_model, other_paths) in self.claims.items():
+                if self.jobs[job_id]["status"] in {"queued", "running"} and (other_model == model_id or paths & other_paths):
+                    raise ValueError("A setup using these model files is running. Wait or cancel it first.")
             profile["license_accepted_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
             self.state.setdefault("license_reviews", {})[review_id] = {
                 "accepted_at": profile["license_accepted_at"], "model_id": model_id,
@@ -279,6 +282,7 @@ class ModelManager:
             job = {"id": job_id, "profile_id": profile["id"], "status": "queued", "stage": "queued",
                    "created": time.time(), "total_bytes": sum(f["size"] for f in profile["files"]), "completed_bytes": 0}
             self.jobs[job_id] = job
+            self.claims[job_id] = (model_id, paths)
             event = self.events[job_id] = threading.Event()
             thread = threading.Thread(target=self._work, args=(job, profile, event, download), daemon=True)
             self.threads.append(thread)
@@ -325,6 +329,8 @@ class ModelManager:
         if profile["files"]:
             self.models_dir.mkdir(parents=True, exist_ok=True)
         remaining = sum(f["size"] for f in profile["files"] if self.file_status(profile, f) == "missing")
+        # ponytail: free space is checked per job, so parallel setups can overcommit; a full disk fails the
+        # download and leaves a resumable .part. Reserve other jobs' missing bytes if this bites.
         if download and profile["files"] and shutil.disk_usage(self.models_dir).free < remaining + 64 * 1024 * 1024:
             raise ValueError("Not enough disk space for these model files")
         for file in profile["files"]:

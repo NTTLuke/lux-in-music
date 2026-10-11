@@ -172,6 +172,14 @@ metadata is separate from composing-stage EOS. Completion needs listening too;
 the user accepted the recorded example. See [song endings](song-endings.md)
 for the duration limits, arrangement policy, evidence and model limitations.
 
+Lyrics are optional. `instrumental` is a shared song input that providers must
+declare as a capability; the API refuses it otherwise. YuE2 sends upstream's
+`[instrumental]` lyrics tag, but the base model still sings vocal notes that its
+planner writes. So YuE2 instrumental songs always use a planned score (Direct
+becomes Full score), the vocal line is replaced by rests (chord symbols kept)
+before fitting and rendering, and that muted score is saved for edits. The
+optional upstream instrumental LoRA (CC BY-NC 4.0) is not used.
+
 The WAV written by the engine is the source for playback, editing and stems.
 FLAC and MP3 downloads are derived copies made on request and never stored.
 

@@ -48,7 +48,7 @@ def _base_options(meta: dict) -> dict:
     options = params.to_request()["options"]
     options.pop("semantic_min_tokens", None)
     options.pop("semantic_max_tokens", None)
-    if params.cot != "off" and not params.abc:
+    if params.cot != "off" and (not params.abc or params.instrumental):  # instrumental scores are saved muted
         score = meta.get("artifacts", {}).get("score")
         if not score:
             raise RuntimeError("this song was planned (cot=%s) but its score is missing" % params.cot)
@@ -68,7 +68,7 @@ def song_tokens(song: str, profile: dict | None = None) -> list[int]:
     params = GenerationParams(**meta["params"])
     # Same request as the original, stopped after the semantic stage: same seed, same tokens.
     options = {**params.to_request()["options"], "stop_after": "semantic"}
-    if meta.get("generation", {}).get("target_duration_s"):
+    if meta.get("generation", {}).get("target_duration_s") or params.instrumental:
         score = meta.get("artifacts", {}).get("score")
         if not score:
             raise RuntimeError("The duration-checked score is missing; semantic recovery is unavailable")
@@ -104,7 +104,8 @@ def render_section(song: str, start_s: float, end_s: float, seed: int, lyrics: s
 
     lyrics = lyrics if lyrics and lyrics.strip() else meta["params"]["lyrics"]
     options = _base_options(meta)
-    if variation == "new" and "abc" in options:
+    # ponytail: instrumental songs keep their muted score, so "new" only re-performs it; re-plan and mute to vary notes.
+    if variation == "new" and "abc" in options and not meta["params"].get("instrumental"):
         # The score fixes melody and rhythm; drop it so the model writes the selection anew.
         options = {k: v for k, v in options.items() if k not in ("abc", "cot")} | {"cot": "off"}
     t0 = time.time()
