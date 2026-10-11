@@ -1,5 +1,27 @@
 # Project handoff
 
+## Security review before public publication
+
+- Reviewed current source, local refs, a fresh remote mirror, release packaging,
+  model download integrity, dependency advisories and GitHub metadata. Detailed
+  findings and private-history identifiers stay in a local maintainer report,
+  outside Git. No confidential song content is added to this review.
+- Gitleaks 8.30.1 (official checksum verified) reports one finding in historical
+  progress notes: a documented WAV SHA-256, not an authentication credential.
+  The Python advisory audit reports no known vulnerabilities in the 22 installed
+  dependency versions on the audited interpreter. This does not cover every
+  Python/platform variant, native libraries or undisclosed vulnerabilities.
+- Temporary synthetic API checks confirm that the studio accepts an arbitrary
+  Host and allows unauthenticated library reads and deletion. Default loopback
+  binding and absent CORS permission do not prove resistance to DNS rebinding.
+  Shared/public hosting needs separate hardening; source publication is distinct.
+- Added SECURITY.md, explicit environment/build-output ignores and weekly
+  Dependabot updates for pinned Actions. Repository security settings still need
+  maintainer review; ruleset reads were unavailable for this private account tier.
+- The repository remains private. A local scanner cannot certify removal of
+  retained sensitive GitHub objects or discussion edit history. Resolve those
+  findings using the private maintainer report before changing visibility.
+
 ## Manual releases on GitHub Actions
 
 Branch: `ci/manual-release-actions`, issue #22.
@@ -14,9 +36,10 @@ Branch: `ci/manual-release-actions`, issue #22.
 - Seven portable regression cases cover preview/publication command selection,
   main/manual-event gates, exact versions, invalid values, injection-like input,
   downgrades, and refusing to start the script on invalid input.
-- Baseline and full application checks passed locally. GitHub execution is still
-  pending until the workflow reaches the default branch. A preview does not build
-  or upload packages; those steps run only during actual publication.
+- Baseline and full application checks passed locally (110 application test
+  executions). PR #23 was merged after both GitHub check runs passed. The manual
+  preview also passed on GitHub in run 38162985134. A preview does not build or
+  upload packages; those steps run only during actual publication.
 - README and CONTRIBUTING explain the GitHub buttons, permissions, stale-main
   handling and recovery files. Publication failures retain built files for seven
   days. Local release usage and model/song exclusion remain unchanged.

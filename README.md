@@ -278,6 +278,13 @@ see [the license review and official links](docs/model-licenses.md).
 
 ## Technical reference
 
+### Security and private songs
+
+Use the studio locally and keep private lyrics, styles and song files out of
+GitHub reports. It has no login and must not be exposed to the internet.
+See [the security policy](SECURITY.md) for supported use, private reporting and
+maintainer publication checks.
+
 ### Contributing and project direction
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Any coding
