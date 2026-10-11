@@ -7,6 +7,22 @@ Entries are written by `./release.sh` from the merged pull requests and the
 commits on `main`. Each release also appears on the
 [releases page](https://github.com/NTTLuke/lux-in-music/releases).
 
+## [0.3.1] - 2026-10-11
+
+### Added
+
+- Infer song length during generation ([#27](https://github.com/NTTLuke/lux-in-music/pull/27))
+
+### Changed
+
+- Record the publication security audit results
+- Add manual GitHub Actions releases with a preview ([#23](https://github.com/NTTLuke/lux-in-music/pull/23))
+
+### Documentation
+
+- Add security policy and publication guidance ([#24](https://github.com/NTTLuke/lux-in-music/pull/24))
+- docs: Record v0.3.0 release verification
+
 ## [0.3.0] - 2026-10-11
 
 ### Added
