@@ -7,13 +7,15 @@
 Steps, in order:
 
 1. preflight: on `main`, clean tree, in sync with `origin/main`, tag still free
-2. repository checks (`scripts/check.py`, plus application checks with --full-checks)
-3. version bump in `pyproject.toml`
-4. `CHANGELOG.md` entry built from the merged pull requests and main commits
-5. `README.md` "Releases and changelog" block refreshed between its markers
-6. release commit and annotated tag, then `main` and the tag are pushed
+2. the changes since the previous release tag
+3. repository checks (`scripts/check.py`, plus application checks with --full-checks)
+4. release files: version in `pyproject.toml` and `uv.lock`, `CHANGELOG.md` entry,
+   `README.md` "Releases and changelog" block
+5. the repository checks again, on the files that are about to be committed
+6. release commit and annotated tag
 7. artifacts built from the tag: source ZIP, wheel, sdist, `SHA256SUMS.txt`
-8. GitHub release created with the notes and the artifacts, then verified
+8. `main` and the tag pushed
+9. GitHub release created with the notes and the artifacts, then verified
 
 Options: --dry-run, --skip-checks, --full-checks, --no-push, --no-build, -v.
 
@@ -179,6 +181,31 @@ def bump_pyproject(new_version: str, current: str) -> None:
     if count != 1:
         die("could not update the version line in pyproject.toml")
     PYPROJECT.write_text(updated, encoding="utf-8")
+    bump_lockfile(new_version)
+
+
+def bump_lockfile(new_version: str) -> None:
+    """Keep uv.lock's own project entry in step with pyproject.toml.
+
+    The lock records the editable project's version, and the repository checks
+    compare the two: releasing without this leaves a red CI on the release commit.
+    """
+    lock = ROOT / "uv.lock"
+    if not lock.exists():
+        detail("no uv.lock to update")
+        return
+    text = lock.read_text(encoding="utf-8")
+    blocks = text.split("[[package]]")
+    for index, block in enumerate(blocks):
+        if 'source = { editable = "." }' not in block:
+            continue
+        blocks[index] = re.sub(
+            r'(?m)^version = "[^"]+"', f'version = "{new_version}"', block, count=1
+        )
+        lock.write_text("[[package]]".join(blocks), encoding="utf-8")
+        detail(f"uv.lock project entry set to {new_version}")
+        return
+    die("could not find the project's editable entry in uv.lock")
 
 
 # ---------------------------------------------------------------- history helpers
@@ -527,7 +554,7 @@ def main() -> None:
         log(f"{PROJECT_NAME} release: {current} -> {version}  ({slug})")
     if args.dry_run:
         log("Dry run: no file, commit, tag or release is created.")
-    total = 7 if args.dry_run else 8
+    total = 7 if args.dry_run else 9
 
     # 1 ---------------------------------------------------------------- preflight
     step(1, total, "Check the repository state")
@@ -609,7 +636,7 @@ def main() -> None:
     entry = changelog_entry(version, release_date, entries, slug, previous)
     block = release_block(version, pretty_date, grouped, slug)
     notes = release_notes(version, release_date, entries, slug, previous)
-    expected = ["pyproject.toml", "CHANGELOG.md", "README.md"]
+    expected = ["pyproject.toml", "uv.lock", "CHANGELOG.md", "README.md"]
     if args.dry_run:
         if version == current:
             log(f"       pyproject.toml: version {version} (already current, no change)")
@@ -638,19 +665,25 @@ def main() -> None:
         die("unexpected changes before the release commit:\n  " + "\n  ".join(unexpected))
     log(f"       updated: {', '.join(changed)}")
 
-    # 5 ---------------------------------------------------------------- commit
-    step(5, total, "Commit and tag")
+    # 5 ---------------------------------------------------------------- verify
+    step(5, total, "Verify the release files with the repository checks")
+    # The step 3 run checked the state before the version bump. This run checks the
+    # state that is about to be committed and pushed, which is what CI will see.
+    run_checks(args.full_checks, args.skip_checks)
+
+    # 6 ---------------------------------------------------------------- commit
+    step(6, total, "Commit and tag")
     run(["git", "add", *expected])
     run(["git", "commit", "-m", f"Release v{version}", "-m", counts_line(grouped)])
     run(["git", "tag", "-a", tag, "-m", f"{PROJECT_NAME} v{version}"])
     log(f"       commit {git('rev-parse', '--short', 'HEAD')} tagged {tag}")
 
-    # 6 ---------------------------------------------------------------- build
-    step(6, total, "Build the release artifacts")
+    # 7 ---------------------------------------------------------------- build
+    step(7, total, "Build the release artifacts")
     artifacts = build_artifacts(version, tag, slug, notes_path, args.no_build)
 
-    # 7 ---------------------------------------------------------------- push
-    step(7, total, "Push the commit and the tag")
+    # 8 ---------------------------------------------------------------- push
+    step(8, total, "Push the commit and the tag")
     if args.no_push:
         log("       push skipped (--no-push)")
     else:
@@ -658,8 +691,8 @@ def main() -> None:
         run(["git", "push", "origin", tag], echo=True)
         log(f"       {BRANCH} and {tag} are on origin")
 
-    # 8 ---------------------------------------------------------------- release
-    step(8, total, "Create the GitHub release")
+    # 9 ---------------------------------------------------------------- release
+    step(9, total, "Create the GitHub release")
     if not publish:
         log("       release not created (--no-push)")
         log(f"\n       local artifacts: {', '.join(path.name for path in artifacts) or 'none'}")
