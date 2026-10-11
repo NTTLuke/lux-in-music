@@ -172,6 +172,11 @@ metadata is separate from composing-stage EOS. Completion needs listening too;
 the user accepted the recorded example. See [song endings](song-endings.md)
 for the duration limits, arrangement policy, evidence and model limitations.
 
+A queued job can be removed and a running generation can be stopped. audio.cpp
+has no request cancellation, so stopping terminates the generation engine; the
+next job restarts it and loads the model again. A stopped job writes no song.
+Separation and stem edits can only be removed while queued.
+
 ## Delivery and evidence
 
 - #4: product/package naming and the shared contributor harness.

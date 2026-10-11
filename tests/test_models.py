@@ -40,12 +40,15 @@ class FakeAdapter:
 
 class FakeProvider:
     def __init__(self):
-        self.calls = []; self.fail_probe = False; self.token = "test-computer"; self.hold_probe = None
+        self.calls = []; self.fail_probe = False; self.token = "test-computer"; self.hold_probe = None; self.hold_run = None
 
     def adapter(self, profile): return FakeAdapter()
     def compatibility_token(self): return self.token
-    def run(self, profile, request):
+    def run(self, profile, request, cancel=None):
         self.calls.append((copy.deepcopy(profile), copy.deepcopy(request)))
+        if self.hold_run:  # inference blocks until cancel() stops the engine
+            self.hold_run.wait(3)
+            raise RuntimeError("engine stopped")
         return {"audio": tiny_audio(), "sample_rate": 8000, "channels": 1, "artifacts": []}
     def probe(self, profile, cancel=None):
         if self.hold_probe:
@@ -53,6 +56,7 @@ class FakeProvider:
         if self.fail_probe:
             raise RuntimeError("This precision cannot run on this device")
         return {"backend": "fake", "compatibility_token": self.token, "smoke_test": "audio"}
+    def cancel(self, profile): self.hold_run.set()
     def close(self): pass
 
 
@@ -383,6 +387,35 @@ class SettingsApiTests(ModelFixtures):
         self.assertTrue(self.request("GET", "/api/settings/status").json()["setup_required"])
         self.assertEqual(self.request("GET", "/api/library").json(), [])
         self.assertEqual(self.request("POST", "/api/generate", {"lyrics": "A song", "style": "Piano"}).status_code, 409)
+
+    def test_queued_and_running_generation_can_be_stopped(self):
+        self.setup_profile()
+        from studio import app as api
+        self.provider.hold_run = threading.Event()
+        song = {"lyrics": "A song", "style": "Piano"}
+        running, queued = (self.request("POST", "/api/generate", song).json() for _ in range(2))
+        for job in (running, queued):
+            self.addCleanup(api.jobs.pop, job["id"], None)
+        def wait(job, status):
+            for _ in range(300):
+                if api.jobs[job["id"]]["status"] == status:
+                    return
+                threading.Event().wait(0.01)
+            self.fail(f"job did not become {status}: {api.jobs[job['id']]}")
+        wait(running, "running")
+        self.assertEqual(self.request("POST", f"/api/jobs/{queued['id']}/cancel").json()["status"], "cancelled")
+        self.assertEqual(self.request("POST", f"/api/jobs/{running['id']}/cancel").status_code, 200)
+        wait(running, "cancelled")
+        self.assertNotIn("error", api.jobs[running["id"]])
+        for _ in range(300):
+            if api._queue.empty() and not api._cancels:
+                break
+            threading.Event().wait(0.01)
+        threading.Event().wait(0.1)
+        self.assertEqual(api.jobs[queued["id"]]["status"], "cancelled")
+        self.assertEqual(len(self.provider.calls), 1)
+        self.assertEqual(self.request("POST", f"/api/jobs/{running['id']}/cancel").status_code, 409)
+        self.assertEqual(list(engine.OUTPUT_DIR.iterdir()), [])
 
     def test_license_gate_is_enforced_by_the_api(self):
         profile = self.profile()

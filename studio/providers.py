@@ -26,7 +26,8 @@ AUDIOCPP_REVISION = "6c3ab9ad4e599a44d287697863b4f8846ef658be"
 
 class Provider(Protocol):
     def adapter(self, profile: dict): ...
-    def run(self, profile: dict, request: dict) -> dict: ...
+    def run(self, profile: dict, request: dict, cancel=None) -> dict: ...
+    def cancel(self, profile: dict) -> None: ...
     def probe(self, profile: dict, cancel=None) -> dict: ...
     def close(self) -> None: ...
 
@@ -137,12 +138,21 @@ class AudioCppProvider:
         # Hold through inference: activation cannot restart an engine in use.
         with self._lease(cancel):
             entry = self._start(profile)
+            if cancel and cancel.is_set():  # cancel() may have stopped the engine this call replaced
+                from .models import Cancelled
+                raise Cancelled()
             response = httpx.post(entry["url"] + "/v1/tasks/run",
                                   json={"model": profile["id"], "request": request},
                                   timeout=httpx.Timeout(10, read=None))
             if not response.is_success:
                 raise RuntimeError(f"audio.cpp error {response.status_code}: {response.text[:500]}")
             return response.json()
+
+    def cancel(self, profile):
+        # audio.cpp has no request cancellation: stop the engine. The next run restarts it.
+        entry = self.slots.get("generation" if profile["task"] == "gen" else "separation")
+        if entry and entry["identity"] == (profile["id"], profile["revision"], profile["root"]):
+            entry["process"].terminate()
 
     def probe(self, profile, cancel=None):
         if profile["task"] == "gen":
