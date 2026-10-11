@@ -143,63 +143,30 @@ for commercial use. Licenses are shown before each download.
 
 ### 5. Create your first song
 
-These steps apply to **v0.3.0 and later**, which include duration analysis.
-If you have an older release, download the [latest release](https://github.com/NTTLuke/lux-in-music/releases/latest)
-to get this feature. The [latest source ZIP](https://github.com/NTTLuke/lux-in-music/archive/refs/heads/main.zip)
-uses the same installation steps.
+Lux infers song length during generation. The published **v0.3.0** still has the
+earlier review step; this one-step flow is in the current development branch.
 
 1. Click **Create** in the sidebar.
-2. Click **Demo · Melodic Techno** to load the example lyrics and a four-minute
-   arrangement. To try a different sound, open **Genre templates** and choose
+2. Click **Demo · Melodic Techno** to load example lyrics and style. To try a
+   different sound, open **Genre templates** and choose
    one of five styles. They use the same example lyrics.
-3. Keep **Complete arrangement · choose duration** at **4:00** for this example,
-   or choose **Automatic duration (recommended)** to let Lux suggest a length.
-4. Click **Analyze duration**. The model prepares a musical arrangement and
-   checks how much time it needs. The panel explains the wait; first use may
-   take longer while the model loads. You can click **Cancel analysis**.
-5. Review the estimated song duration and BPM. If your target is too short,
-   click **Use suggested duration**, or edit your inputs and analyze again.
-6. Click **Create** to generate the audio using the analyzed arrangement.
-   Progress shows composing, checking the ending and rendering.
-7. Your song appears in **Library**. Click it to listen, or use its download
+3. Click **Create**. Lux analyzes the lyrics, style and tempo, chooses a song
+   length, adapts the arrangement if needed, then generates the audio. This
+   planning step uses model processing time. Progress shows each stage.
+4. Your song appears in **Library**. Click it to listen, or use its download
    button to save the WAV audio file.
 
-Loading a demo or template only fills in the form. **Analyze duration** prepares
-the arrangement; **Create** produces the audio. You can edit the inputs for your
-own songs. Listen to each result to check its phrasing and ending.
+Loading a demo or template only fills in the form. Lux chooses the length from
+the actual musical plan, rather than a duration value entered in advance. You
+can edit the inputs for your own songs. Listen to each result to check its
+phrasing and ending.
 
-### Choose a duration for your song
-
-| Duration mode | What it does |
-| --- | --- |
-| **Automatic duration (recommended)** | Analyze the musical arrangement and review its suggested duration before creating audio. |
-| **Complete arrangement · choose duration** | Choose an approximate target, then analyze whether the vocal passages and ending fit. The final song may be shorter or vary from the target. |
-| **Clip / hard limit** | Set a maximum length. This can stop the audio mid-phrase and leave the song unfinished. |
-
-Analysis uses the model to plan the music, including vocals, pauses and
-instrumental passages. It takes processing time. **Waiting for the model** means
-an earlier task is still using it; **Analyzing your song** means your plan is being
-prepared. The progress indicator shows that work is ongoing, without promising
-an exact time remaining.
-
-After analysis, the panel explains what to do:
-
-- **Arrangement ready:** review the estimate and click **Create**. Lux reuses
-  that plan, so it does not spend time planning it again.
-- **Choose a longer duration:** click **Use suggested duration** to give the
-  arrangement enough room. For a shorter song, **Edit lyrics** to shorten a verse
-  or remove a repeated chorus, or **Edit style** to request a more compact
-  arrangement, then analyze again.
-- **Arrangement too long:** reduce the text or arrangement and analyze again.
-  YuE2 currently supports complete-song targets up to **5:30** in Lux.
-- **Your inputs changed** or **Analyze again before creating:** run the analysis
-  again after editing analyzed inputs, changing the model, reloading the page,
-  restarting Lux, or letting the saved analysis expire.
-
-The duration is an estimate of the musical plan, not a guarantee of exact audio
-length or how every word will be performed. Multiple variations reuse that
-arrangement with different performance seeds. Duration analysis is offered only
-by models that support it.
+YuE2 checks that the full vocal arrangement fits its supported limit (currently
+**5:30**), keeps vocal passages and the ending, and may shorten instrumental
+sections. If the vocal material itself is too long to fit, Lux stops before
+rendering and explains how to shorten it. Multiple variations share one analyzed
+arrangement and differ in performance. The selected length is a plan estimate;
+the sung performance may finish earlier, so listen to each result.
 
 ## Open it again and stop it
 
@@ -390,8 +357,8 @@ the corresponding local paths/runtime. Changing a runtime requires a new probe.
 ### Studio UI
 
 * Create panel: title, lyrics with section-tag buttons, style with genre/mood/instrument/vocal/mix chips,
-  automatic or manual duration analysis with advice and plan reuse, clip length
-  slider, planning mode, random/fixed seed, 1-4 variations, advanced sampling sliders, ABC input
+  implicit model-backed song-length analysis, planning progress, random/fixed
+  seed, 1-4 variations, advanced sampling sliders, ABC input
 * Genre templates: Progressive Metal, Indie Pop, Cinematic Synthwave, Soul & R&B,
   and Jazz Fusion. All use the Melodic Techno demo lyrics with the selected style,
   keeping your title and settings;
@@ -450,8 +417,8 @@ CLI:
 uv run studio-gen --help
 ```
 
-The CLI help explains how to provide your own local input file, musical style
-and duration. The separate analysis/review step is part of the browser UI.
+The CLI help explains how to provide your own local input file and musical style.
+It uses the same automatic length analysis as the browser.
 
 ## Parameters (v0.1)
 
@@ -463,24 +430,18 @@ to the YuE2 adapter; these options are not required by other providers.
 |---|---|---|---|
 | lyrics | `lyrics` | empty; optional | Section tags describe the song structure; Instrumental ignores this text |
 | style | `style` | (required) | language, genre, instruments, vocal, mix |
-| cot | `cot` | `off` here (engine default is `full`) | `off` direct; `melody` / `full` plan an ABC score first |
+| cot | `cot` | full for automatic complete-song generation | YuE2 plans an ABC score to infer length and protect the ending |
 | seed | `seed` | 1234 | same params + seed gives the same song |
-| max_duration_s | `semantic_max_tokens` = s × 25 | ≈ 360 s | upper bound. The model may stop earlier |
-| target_duration_s | staged adapter planning | none in CLI; selected or suggested in UI | complete arrangement target, 30–330 s; separate finishing allowance and EOS check |
 | num_inference_steps | `num_inference_steps` | 8 | NAR ODE steps |
 | guidance_scale | `guidance_scale` | 1.01 (off) / 1.0 | |
 | temperature / top-p / top-k / rep. penalty | `semantic_*` | 1.0 / 0.95 / 100 / 1.2 | |
 | abc | `abc` | (none) | condition on your own ABC score (needs cot=melody/full) |
 
-Use **Automatic duration** or **Complete arrangement · choose duration** in the
-browser to analyze and review the full composition before rendering. The API
-queues analysis through `/api/duration-analysis` and accepts its `analysis_id`
-when creating audio through `/api/generate`. Plans stay in local server memory
-for up to 30 minutes; changed inputs or model profiles require fresh analysis.
-**Clip / hard limit** (CLI `--max-duration`) can deliberately cut a song mid-phrase.
-The demo now targets four minutes; overlong vocal material is rejected with
-shortening/length advice. See [duration and ending behavior](docs/song-endings.md)
-for retries, retained artifacts, model limits and listening acceptance.
+The browser, API and CLI infer the arrangement length as part of one generation
+job. Users cannot supply a target or a hard duration cap. The generated song
+records Lux's selected plan length and any ending/truncation evidence. See
+[duration and ending behavior](docs/song-endings.md) for model limits, retries
+and listening guidance.
 
 ## Measured on M4 Max (Q8 + F16 VAE, Metal)
 

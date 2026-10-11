@@ -112,7 +112,6 @@ Can you feel it in the dark
 We are the light in the dark`,
       style: "English, melodic techno, dark progressive house, cinematic, 124 BPM, four-on-the-floor kick, pulsing rolling bassline, hypnotic synth arpeggios, huge analog lead, epic supersaw chords, atmospheric pads, ethereal female vocal, airy reverb, emotional build-up, massive festival drop, wide stereo, polished club master",
       cot: "full",
-      target_duration_s: 240,
     },
   },
 ];
@@ -316,15 +315,9 @@ function setupForm() {
   $("style").oninput = syncChips; syncChips();
   $("style-clear").onclick = () => { $("style").value = "English, "; syncChips(); $("style").focus(); };
 
-  const len = $("len");
-  len.oninput = () => { $("len-val").textContent = fmt(len.value); paintRange(len); updateLyricsCount(); };
-  len.oninput();
-  $("duration-mode").onchange = updateDurationUI;
-
   segmented("cot", (v) => {
     state.cot = v;
-    if (v === "off") { $("duration-mode").value = "cap"; $("instrumental").checked = false; }
-    updateDurationUI();
+    updateSongLengthUI();
   });
   segmented("variations", (v) => { state.variations = Number(v); updateGoLabel(); });
 
@@ -341,7 +334,6 @@ function setupForm() {
   $("adv-reset").onclick = (e) => { e.preventDefault(); resetAdvanced(); };
 
   $("form").onsubmit = submit;
-  Duration.setup();
   updateGoLabel();
 }
 
@@ -357,29 +349,18 @@ function paintRange(el) { el.style.setProperty("--p", `${((el.value - el.min) / 
 function updateLyricsCount() {
   const instrumental = $("instrumental").checked;
   $("lyrics").hidden = $("section-tags").hidden = $("lyrics-count").hidden = instrumental;
-  if (instrumental) { $("lyrics-advice").textContent = "No vocals: the lyrics are not used and the planned score's vocal line is muted. Describe instruments in the style and leave out vocal tags."; Duration.refresh(); return; }
+  if (instrumental) { $("lyrics-advice").textContent = "No vocals: the lyrics are not used and the planned score's vocal line is muted. Describe instruments in the style and leave out vocal tags."; return; }
   const v = $("lyrics").value, lines = v.split("\n").filter((l) => l.trim() && !/^\[.*\]$/.test(l.trim())).length;
   $("lyrics-count").textContent = `${lines} lines · ${v.length} chars`;
   const words = v.replace(/^\[.*\]$/gm, "").trim().split(/\s+/).filter(Boolean).length;
-  const target = Settings.capability().target_duration_s && $("duration-mode").value !== "cap";
-  $("lyrics-advice").textContent = target ? `${words} words. ${$("duration-mode").value === "target" && words / Number($("len").value) > 2.5 ? "Dense lyrics: consider fewer repeated choruses or a longer duration. " : ""}${/\[outro(?:\s*\||\])/i.test(v) ? "" : "Add [Outro] and a final lyric phrase to describe the ending."}` : "";
-  Duration.refresh();
+  $("lyrics-advice").textContent = words ? `${words} words. ${/\[outro(?:\s*\||\])/i.test(v) ? "" : "For a clear ending, add a final section and a closing lyric phrase."}` : "";
 }
-function updateDurationUI() {
-  const cap = Settings.capability(), supported = Boolean(cap.target_duration_s);
-  $("duration-mode").querySelector('[value="auto"]').hidden = !cap.duration_analysis;
-  if (Settings.ready() && $("duration-mode").value === "auto" && !cap.duration_analysis) $("duration-mode").value = supported ? "target" : "cap";
-  const automatic = cap.duration_analysis && $("duration-mode").value === "auto";
-  const target = supported && $("duration-mode").value !== "cap";
-  $("duration-input").hidden = automatic;
-  $("duration-mode").hidden = $("duration-mode-label").hidden = !supported;
-  $("len-label").textContent = target ? "Song duration (approximate)" : "Maximum length";
-  $("len").min = target ? cap.min_target_duration_s || 30 : 10;
-  $("len").max = target ? cap.target_duration_s : cap.max_duration_s || 360;
-  $("len").value = Math.max(Number($("len").min), Math.min(Number($("len").value), Number($("len").max)));
-  if (target && state.cot === "off" && cap.planning?.includes("full")) { state.cot = "full"; setSegmented("cot", "full"); }
-  $("duration-hint").textContent = automatic ? "Let the model plan a complete song from your lyrics and style, then review its suggested duration before creating audio." : target ? "Approximate song duration. The final performance can vary or finish earlier. We check the arrangement first, keeping vocal passages and the ending. A small allowance lets the model finish." : "Hard upper bound. This can cut a song mid-phrase; it does not plan an ending.";
-  $("len").oninput();
+function updateSongLengthUI() {
+  const cap = Settings.capability(), supported = Boolean(cap.duration_analysis);
+  $("duration-hint").closest(".field").hidden = !supported;
+  if (supported) {
+    $("duration-hint").textContent = "Lux analyzes your lyrics, style and tempo when you click Create, then chooses a song length and prepares the arrangement before generating audio. Planning takes extra model processing time. The final performance may be shorter or vary from the plan. If the model cannot fit a complete arrangement, Lux explains what to shorten.";
+  }
 }
 function styleTags() { return $("style").value.split(",").map((t) => t.trim()).filter(Boolean); }
 function toggleStyleTag(tag) {
@@ -395,21 +376,18 @@ function syncChips() {
     button.setAttribute("aria-pressed", String(selected));
   }
   $("template-status").textContent = "";
-  Duration.refresh();
 }
 function resetAdvanced() {
   state.adv = {};
   for (const s of SLIDERS) { const el = $(s.id); el.value = s.def ?? s.min; paintRange(el); const v = $(`${s.id}-v`); v.textContent = s.defLabel || s.def; v.classList.add("default"); }
   $("abc").value = "";
 }
-function updateGoLabel() { $("go-label").textContent = state.variations > 1 ? `Create ${state.variations} variations` : "Create"; Duration.refresh(); }
+function updateGoLabel() { $("go-label").textContent = state.variations > 1 ? `Create ${state.variations} variations` : "Create"; }
 
 function songInputs() {
   return {
     title: $("title").value.trim() || undefined, lyrics: $("lyrics").value, style: $("style").value,
     instrumental: Settings.capability().instrumental && $("instrumental").checked || undefined,
-    target_duration_s: Settings.capability().target_duration_s && $("duration-mode").value === "target" ? Number($("len").value) : undefined,
-    max_duration_s: Settings.capability().max_duration_s && $("duration-mode").value === "cap" ? Number($("len").value) : undefined,
     model_options: Settings.options(),
   };
 }
@@ -418,26 +396,20 @@ async function submit(e) {
   e.preventDefault();
   if (!Settings.ready()) { location.hash = "#/settings"; return; }
   $("form-error").textContent = "";
-  if (Duration.enabled() && !Duration.ready()) { await Duration.analyze(); return; }
-  const base = Duration.generationInputs(songInputs());
+  const base = songInputs();
   const random = $("seed-random").checked, seed0 = Number($("seed").value);
-  const analyzedSeed = Duration.seed();
   state.submitting = true;
   $("go").disabled = true;
   try {
-    for (let i = 0; i < state.variations; i++) {
-      const seed = analyzedSeed != null ? analyzedSeed + i : random ? Math.floor(Math.random() * 2 ** 31) : seed0 + i;
-      const r = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...base, seed }) });
-      if (!r.ok) {
-        const d = (await r.json()).detail;
-        $("form-error").textContent = Array.isArray(d) ? d.map((x) => `${x.loc.slice(1).join(".") || "request"}: ${x.msg}`).join("\n") : String(d);
-        if (base.analysis_id && r.status === 409) Duration.unavailable(String(d));
-        break;
-      }
-      Duration.created();
+    const seed = random ? Math.floor(Math.random() * 2 ** 31) : seed0;
+    const r = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...base, seed, variations: state.variations }) });
+    if (!r.ok) {
+      const d = (await r.json()).detail;
+      $("form-error").textContent = Array.isArray(d) ? d.map((x) => `${x.loc.slice(1).join(".") || "request"}: ${x.msg}`).join("\n") : String(d);
     }
   } catch (error) { $("form-error").textContent = "The studio could not be reached. Check that it is running and try again."; }
-  finally { state.submitting = false; Duration.refresh(); }
+  finally { state.submitting = false; }
   pollJobs();
 }
 
@@ -449,8 +421,7 @@ function loadIntoForm(p) {
   updateLyricsCount();
   $("style").value = p.style || ""; syncChips();
   state.cot = p.cot || "off"; setSegmented("cot", state.cot);
-  $("duration-mode").value = p.target_duration_s ? "target" : "cap";
-  $("len").value = p.target_duration_s || p.max_duration_s || Math.round((p.semantic_max_tokens || 1500) / 25); updateDurationUI();
+  updateSongLengthUI();
   $("seed-random").checked = false; $("seed").disabled = false; $("seed").value = p.seed ?? 1234;
   resetAdvanced();
   for (const s of SLIDERS) if (p[s.id] != null) { const el = $(s.id); el.value = p[s.id]; el.oninput(); }
@@ -555,19 +526,19 @@ async function pollJobs() {
   clearTimeout(pollTimer);
   try {
     const jobs = await (await fetch("/api/jobs")).json();
-    const doneBefore = state.jobs.filter((j) => j.status === "done" && j.kind !== "separate" && j.kind !== "duration-analysis").length;
+    const doneBefore = state.jobs.filter((j) => j.status === "done" && j.kind !== "separate").length;
+    const songsBefore = state.jobs.reduce((n, j) => n + (j.completed_variations || 0), 0);
     const changed = JSON.stringify(jobs.map((j) => [j.id, j.status])) !== JSON.stringify(state.jobs.map((j) => [j.id, j.status]));
     state.jobs = jobs; state.jobsAt = Date.now();
-    Duration.onJobs(jobs);
     if (window.Lux) Lux.onJobs(jobs);
-    if (jobs.filter((j) => j.status === "done" && j.kind !== "separate" && j.kind !== "duration-analysis").length !== doneBefore) await loadLibrary(true);
+    if (jobs.filter((j) => j.status === "done" && j.kind !== "separate").length !== doneBefore ||
+        jobs.reduce((n, j) => n + (j.completed_variations || 0), 0) !== songsBefore) await loadLibrary(true);
     else if (changed) render();
   } catch { /* studio restarting */ }
   const busy = state.jobs.some((j) => j.status === "running" || j.status === "queued");
   pollTimer = setTimeout(pollJobs, busy ? 1000 : 4000);
 }
 function tickJobs() {
-  Duration.tick();
   for (const j of state.jobs) {
     if (j.status !== "running") continue;
     const row = document.querySelector(`.song[data-job="${j.id}"]`); if (!row) continue;
@@ -666,7 +637,7 @@ async function openDrawer(s) {
   if (s.artifacts?.score) {
     try { abc = await (await fetch(`/outputs/${encodeURIComponent(s.artifacts.score)}`)).text(); } catch { abc = ""; }
   }
-  const kv = [["Length", fmt(s.duration_s)], ["Target", p.target_duration_s ? fmt(p.target_duration_s) : "—"], ["Hard limit", p.max_duration_s ? fmt(p.max_duration_s) : "—"], ["Planning", p.cot], ["Seed", p.seed], ["Made in", fmt(s.elapsed_s)],
+  const kv = [["Length", fmt(s.duration_s)], ["Planned length", p.target_duration_s ? fmt(p.target_duration_s) : "—"], ["Model cap", p.max_duration_s ? fmt(p.max_duration_s) : "—"], ["Planning", p.cot], ["Seed", p.seed], ["Made in", fmt(s.elapsed_s)],
     ["Sample rate", `${s.sample_rate / 1000} kHz · ${s.channels === 2 ? "stereo" : "mono"}`], ["Created", (s.created || "").replace("T", " ").slice(0, 16)],
     ...SLIDERS.filter((x) => p[x.id] != null).map((x) => [x.label, p[x.id]])];
   $("drawer").innerHTML = `

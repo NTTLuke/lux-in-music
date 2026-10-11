@@ -1,5 +1,41 @@
 # Project handoff
 
+## Current work: infer song length inside generation
+
+Branch: `feat/implicit-duration-generation`, issue #18.
+
+- Replaced the separate duration analysis/review action with one Generate job.
+  The shared engine analyzes lyrics/style/tempo, chooses an internal YuE2 target,
+  fits instrumental sections while preserving vocals and the ending, then renders.
+- Removed duration selection from the Create form, generation API and CLI. A job
+  records Lux's inferred target and duration diagnostics in the song metadata.
+  Variations share one checked score and use different performance seeds.
+- The UI explains that model planning adds processing time and shows analysis as
+  a generation stage. Plans beyond the model limit fail before rendering and
+  suggest shortening verses or repeated sections. No private prompt text is used
+  in fixtures, documentation or logs.
+- The Planning controls remain visible for models that support them. Automatic
+  length analysis no longer hides the section or changes the user's selected
+  planning mode in the form.
+- Offline tests cover single-job flow, API rejection of manual length fields,
+  inferred target metadata, variation plan reuse and over-limit failure.
+- Verification: baseline and full offline checks passed. A synthetic native run
+  used YuE2 Q8_0/F16, seed 3217 and an explicit 100 BPM style. Lux inferred a
+  60-second target from the 57.6-second score; the final WAV is 55.84 seconds,
+  ended with EOS and was generated in 29.1 seconds. SHA-256:
+  `b672f3a137b5488bcbfa0e6ea738b63245c4503dd105ecc26b991d6c07f99724`.
+  The ignored local artifact is `outputs/implicit-length-smoke-20261011.wav`.
+  Listening review is still pending; EOS and matching length do not establish
+  musical quality.
+- Browser automation could not run: Playwright is not installed in `.venv`, the
+  configured uv cache is not accessible in this sandbox, and a temporary cache
+  could not reach PyPI because DNS/network access is unavailable. A served-page
+  regression test now checks that the manual control and separate endpoint are
+  absent. This does not replace visual browser review.
+- Limits: YuE2's complete arrangement target remains 30–330 seconds with a
+  separate internal finishing cap up to 360 seconds. The estimate describes the
+  score, not the final performed length. Native audio/listening check remains.
+
 ## Security review before public publication
 
 - Reviewed current source, local refs, a fresh remote mirror, release packaging,

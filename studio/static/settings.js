@@ -34,8 +34,7 @@ const Settings = (() => {
     $("abc").closest(".field").hidden = !cap.abc;
     $("instrumental-toggle").hidden = !cap.instrumental;
     if (!cap.instrumental && $("instrumental").checked) { $("instrumental").checked = false; updateLyricsCount(); }
-    $("len").closest(".field").hidden = !cap.max_duration_s && !cap.target_duration_s;
-    updateDurationUI();
+    updateSongLengthUI();
     for (const slider of SLIDERS) $(slider.id).closest(".slider").hidden = !cap.options?.includes(slider.id);
     const setupHint = "Choose and activate a model in Settings to create music.";
     if (!status.active) $("form-error").textContent = setupHint;

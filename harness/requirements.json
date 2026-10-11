@@ -165,17 +165,19 @@
     {
       "id": "duration-analysis-review",
       "issue": "https://github.com/NTTLuke/lux-in-music/issues/18",
-      "description": "Explain arrangement analysis and help the user review a duration before creating audio.",
+      "description": "Infer and adapt song length inside a single generation flow from lyrics, style and tempo.",
       "status": "implemented",
       "tests": [
         "tests.test_endings.DurationAnalysisTests",
-        "tests.test_endings.DurationAnalysisApiTests"
+        "tests.test_endings.ImplicitDurationApiTests",
+        "tests.test_app.ProductIdentityTests"
       ],
       "acceptance": [
-        "Analysis prepares a checked score without creating audio and reports its nominal duration and BPM.",
-        "Short targets return a usable duration suggestion; over-limit and invalid plans are reported without a false estimate.",
-        "Generation reuses the checked plan and refuses changed inputs, model profiles and expired analysis IDs.",
-        "Fresh installs and unsupported providers cannot start analysis; running analysis can be cancelled without a song."
+        "One Generate request queues analysis, chooses an internal target, adapts safe instrumental passages and generates audio.",
+        "The browser, CLI and generation API do not expose or accept a manually selected target or length cap.",
+        "Vocal passages and the ending are preserved; an arrangement beyond model limits fails before audio with clear editing suggestions.",
+        "Variations reuse one checked arrangement with different performance seeds.",
+        "The song records the inferred target and analysis diagnostics without exposing the private score in job responses."
       ]
     },
     {

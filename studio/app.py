@@ -50,8 +50,6 @@ jobs: dict[str, dict] = {}
 _queue: queue.Queue[str] = queue.Queue()
 _jobs_lock = threading.Lock()  # queued -> running/cancelled transitions
 _cancels: dict[str, threading.Event] = {}  # running job id -> stop request
-_plans: dict[str, dict] = {}  # private, bounded, temporary duration-analysis results
-PLAN_TTL_S = 30 * 60
 # Seconds of compute per second of audio, learned from finished jobs (M4 Max, warm model ~0.45).
 _speed = {"ratio": 0.5, "overhead": 8.0}
 
@@ -75,8 +73,11 @@ def _estimate(job: dict) -> float:
         span = params["end_s"] - params["start_s"]
         sep = _sep_speed.get(params.get("mode", "4stems"), 0.5) * (span + 6)
         return 6 + 0.25 * dur + 0.3 * span + sep
-    target = params.get("target_duration_s") or params.get("max_duration_s") or 60
-    return _speed["overhead"] + _speed["ratio"] * target
+    target = params.get("target_duration_s") or params.get("max_duration_s")
+    if target is None:
+        words = len(params.get("lyrics", "").split())
+        target = min(330, max(45, words / 2.2))
+    return (_speed["overhead"] + _speed["ratio"] * target) * job.get("variations", 1)
 
 
 def _worker() -> None:
@@ -90,26 +91,6 @@ def _worker() -> None:
             cancel = _cancels[job_id] = threading.Event()
             job.update(status="running", started=time.time(), eta_s=_estimate(job))
         try:
-            if job["kind"] == "duration-analysis":
-                res = engine.analyze_duration(GenerationParams(**job["params"]), job["profile"],
-                    progress=lambda stage: cancel.is_set() or job.update(stage=stage), cancel=cancel)
-                if cancel.is_set():
-                    job.update(status="cancelled")
-                    continue
-                with _jobs_lock:
-                    if cancel.is_set():
-                        job.update(status="cancelled")
-                        continue
-                    res["prepared"]["report"]["duration_analysis_id"] = job_id
-                    for key, value in list(_plans.items()):
-                        if time.time() - value["created"] > PLAN_TTL_S:
-                            del _plans[key]
-                    _plans[job_id] = {"params": res["params"], "profile": copy.deepcopy(job["profile"]),
-                                      "prepared": res["prepared"], "created": time.time()}
-                    while len(_plans) > 32:
-                        del _plans[next(iter(_plans))]
-                    job.update(status="done", result=res["analysis"])
-                continue
             if job["kind"] == "stemedit":
                 p = job["params"]
                 res = separate.replace_stem(p["song"], p["set_id"], p["stem"], p["start_s"], p["end_s"],
@@ -123,13 +104,30 @@ def _worker() -> None:
                 job.update(status="done", result=res)
                 _sep_speed[p["mode"]] = res["elapsed_s"] / max(1.0, _song_duration(p["song"]))
                 continue
-            res = engine.generate(GenerationParams(**job["params"]), profile=job["profile"],
-                                  progress=lambda stage: cancel.is_set() or job.update(stage=stage),
-                                  cancel=cancel, prepared=job.get("_prepared"))
-            job.update(status="done", result=json.loads(res.meta_path.read_text()))
-            if res.duration_s > 5:
-                r = max(0.1, (res.elapsed_s - _speed["overhead"]) / res.duration_s)
-                _speed["ratio"] = 0.7 * _speed["ratio"] + 0.3 * r
+            count = job.get("variations", 1)
+            base = GenerationParams(**job["params"])
+            prepared_state = {}
+            songs = []
+            for index in range(count):
+                if cancel.is_set():
+                    break
+                current = (prepared_state["params"].model_copy(update={"seed": base.seed + index})
+                           if index and prepared_state else base.model_copy(update={"seed": base.seed + index}))
+                stage = lambda label, i=index: cancel.is_set() or job.update(
+                    stage=(f"Variation {i + 1}/{count} · {label}" if count > 1 else label))
+                name = None if count == 1 else f"{time.strftime('%Y%m%d-%H%M%S')}-{engine.slugify(current.title or engine.auto_title(current.lyrics))}-{job_id}-{index + 1}"
+                res = engine.generate(current, name=name, profile=job["profile"], progress=stage,
+                    cancel=cancel, prepared=prepared_state.get("prepared"),
+                    on_prepared=lambda selected, plan: prepared_state.update(params=selected, prepared=copy.deepcopy(plan)))
+                songs.append(json.loads(res.meta_path.read_text()))
+                job["completed_variations"] = len(songs)
+                if res.duration_s > 5:
+                    r = max(0.1, (res.elapsed_s - _speed["overhead"]) / res.duration_s)
+                    _speed["ratio"] = 0.7 * _speed["ratio"] + 0.3 * r
+            if cancel.is_set():
+                job.update(status="cancelled", result={"songs": songs} if songs else None)
+            else:
+                job.update(status="done", result=songs[0] if len(songs) == 1 else {"songs": songs})
         except Exception as e:
             if cancel.is_set():
                 job.update(status="cancelled")
@@ -198,73 +196,39 @@ def cancel_model_setup(job_id: str):
         raise HTTPException(404, str(error)) from error
 
 
-class GenerateRequest(GenerationParams):
-    analysis_id: str | None = None
-
-
-def _plan_inputs(params):
-    # Durations and performance seeds may change while reusing the same composition.
-    return {k: v for k, v in params.items() if k not in {
-        "title", "seed", "target_duration_s", "max_duration_s", "semantic_max_tokens"}}
-
-
 def _public_job(job):
     return {key: value for key, value in job.items() if not key.startswith("_")}
 
 
+class GenerateRequest(GenerationParams):
+    variations: int = Field(1, ge=1, le=4)
+
+
 @app.post("/api/generate")
 def api_generate(req: GenerateRequest):
-    params = GenerationParams(**req.model_dump(exclude={"analysis_id"}, exclude_none=True))
-    prepared = None
+    length_controls = {"target_duration_s", "max_duration_s", "semantic_max_tokens", "analysis_id"}
+    supplied_options = req.model_options or {}
+    if (any(getattr(req, key, None) is not None for key in length_controls)
+            or any(key in supplied_options for key in length_controls)):
+        raise HTTPException(422, "Lux chooses the song length automatically from the lyrics and style.")
+    variations = getattr(req, "variations", 1)
+    params = GenerationParams(**req.model_dump(exclude={"variations"}, exclude_none=True))
     try:
         profile = get_manager().snapshot()
         adapter = get_provider(profile).adapter(profile)
         if params.instrumental and not adapter.capabilities.get("instrumental"):
             raise ValueError("The selected model cannot generate instrumental music")
         params = adapter.normalize(params)
-        analysis_id = getattr(req, "analysis_id", None)
-        if analysis_id:
-            with _jobs_lock:
-                cached = _plans.get(analysis_id)
-                if cached is None or time.time() - cached["created"] > PLAN_TTL_S:
-                    _plans.pop(analysis_id, None)
-                    raise HTTPException(409, "The duration analysis expired. Analyze again before creating the song.")
-                if cached["profile"] != profile or _plan_inputs(cached["params"]) != _plan_inputs(params.model_dump(exclude_none=True)):
-                    raise HTTPException(409, "The song inputs or selected model changed. Analyze again to get a matching duration.")
-                prepared = copy.deepcopy(cached["prepared"])
-            adapter.reuse_plan(params, prepared)  # reject an incompatible duration before queueing
     except SetupRequired as error:
         raise HTTPException(409, str(error)) from error
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
     job_id = uuid.uuid4().hex[:8]
     jobs[job_id] = {"id": job_id, "kind": "generate", "status": "queued", "created": time.time(),
-                    "params": params.model_dump(exclude_none=True), "profile": profile}
-    if prepared is not None:
-        jobs[job_id]["_prepared"] = prepared
+                    "params": params.model_dump(exclude_none=True), "profile": profile,
+                    "variations": variations}
     _queue.put(job_id)
     return _public_job(jobs[job_id])
-
-
-@app.post("/api/duration-analysis")
-def api_duration_analysis(params: GenerationParams):
-    try:
-        profile = get_manager().snapshot()
-        adapter = get_provider(profile).adapter(profile)
-        if not adapter.capabilities.get("duration_analysis"):
-            raise ValueError("The selected model does not support duration analysis.")
-        if params.instrumental and not adapter.capabilities.get("instrumental"):
-            raise ValueError("The selected model cannot generate instrumental music")
-        params = adapter.normalize(params)
-    except SetupRequired as error:
-        raise HTTPException(409, str(error)) from error
-    except ValueError as error:
-        raise HTTPException(422, str(error)) from error
-    job_id = uuid.uuid4().hex[:8]
-    jobs[job_id] = {"id": job_id, "kind": "duration-analysis", "status": "queued", "created": time.time(),
-                    "params": params.model_dump(exclude_none=True), "profile": profile}
-    _queue.put(job_id)
-    return jobs[job_id]
 
 
 @app.get("/api/jobs")
@@ -282,7 +246,7 @@ def api_cancel_job(job_id: str):
             raise HTTPException(404)
         if job["status"] == "queued":
             job.update(status="cancelled", finished=time.time())
-        elif job["status"] == "running" and job["kind"] in {"generate", "duration-analysis"} and job_id in _cancels:
+        elif job["status"] == "running" and job["kind"] == "generate" and job_id in _cancels:
             # ponytail: generation only; separation/stem edits run several steps that do not check cancel yet.
             _cancels[job_id].set()
             job["stage"] = "Stopping…"
@@ -300,7 +264,6 @@ def api_dismiss_job(job_id: str):
     if job["status"] == "running":
         raise HTTPException(409, "job is running")
     del jobs[job_id]
-    _plans.pop(job_id, None)
     return {"ok": True}
 
 

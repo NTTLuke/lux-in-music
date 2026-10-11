@@ -81,7 +81,7 @@ class DurationAnalysisTests(unittest.TestCase):
                 YuE2Adapter().analyze_duration(GenerationParams(style="Pop"), lambda _: {"artifacts": [art]})
 
 
-class DurationAnalysisApiTests(ModelFixtures):
+class ImplicitDurationApiTests(ModelFixtures):
     def request(self, path, body=None, method="POST"):
         from studio.app import app
         async def send():
@@ -97,64 +97,82 @@ class DurationAnalysisApiTests(ModelFixtures):
         self.assertNotIn(api.jobs[job["id"]]["status"], {"queued", "running"})
         return api.jobs[job["id"]]
 
-    def test_analysis_queue_reuses_plan_and_refuses_changed_inputs_profile_and_expiry(self):
+    def test_generation_is_one_job_and_rejects_manual_length_fields(self):
         self.setup_profile()
         from studio import app as api
-        adapter, calls = YuE2Adapter(), []
+        rejected = self.request("/api/generate", {"style": "Piano", "target_duration_s": 120})
+        self.assertEqual(rejected.status_code, 422)
+        self.assertIn("chooses the song length automatically", rejected.json()["detail"])
+        self.assertEqual(self.request("/api/generate", {"style": "Piano", "max_duration_s": 120}).status_code, 422)
+        self.assertEqual(self.request("/api/generate", {"style": "Piano", "model_options": {"semantic_max_tokens": 1200}}).status_code, 422)
+        self.assertEqual(self.request("/api/generate", {"style": "Piano", "analysis_id": "old-flow"}).status_code, 422)
+        response = self.request("/api/generate", {"style": "Piano", "lyrics": "Synthetic song"})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["kind"], "generate")
+        self.assertEqual(response.json()["status"], "queued")
+        self.addCleanup(api.jobs.pop, response.json()["id"], None)
+        self.assertEqual(self.request("/api/duration-analysis", {"style": "Piano"}).status_code, 404)
+
+    def test_variations_reuse_the_implicit_arrangement(self):
+        self.setup_profile()
+        from studio import app as api
+        calls = []
         def run(profile, request, cancel=None):
             calls.append(copy.deepcopy(request))
             if request["options"].get("stop_after") == "abc":
                 return {"artifacts": [artifact(score())]}
-            return {"audio": tiny_audio(), "artifacts": [artifact(json.dumps([1] * 1000), ident="semantic")]}
-        body = {"style": "English, piano", "lyrics": "Synthetic song", "model_options": {"cot": "full"}}
-        with patch.object(self.provider, "adapter", return_value=adapter), patch.object(self.provider, "run", side_effect=run):
-            response = self.request("/api/duration-analysis", body)
-            self.assertEqual(response.status_code, 200)
-            job = self.wait(response.json())
-            self.addCleanup(api.jobs.pop, job["id"], None)
-            self.addCleanup(api._plans.pop, job["id"], None)
-            self.assertEqual(job["status"], "done", job.get("error"))
-            self.assertFalse(list(self.root.glob("outputs/*")), "Analysis must not write songs")
-            generate = {**body, "target_duration_s": 40, "analysis_id": job["id"]}
-            self.assertEqual(self.request("/api/generate", {**generate, "lyrics": "Changed synthetic text"}).status_code, 409)
-            self.assertEqual(self.request("/api/generate", {**generate, "target_duration_s": 10}).status_code, 422)
-            response = self.request("/api/generate", {**generate, "seed": 1235})
+            if request["options"].get("stop_after") == "semantic":
+                return {"artifacts": [artifact(json.dumps([1] * 1000), "false", "semantic")]}
+            return {"audio": tiny_audio(), "artifacts": [artifact(json.dumps([1] * 1000), "false", "semantic")]}
+        with patch.object(self.provider, "adapter", return_value=YuE2Adapter()), patch.object(self.provider, "run", side_effect=run):
+            response = self.request("/api/generate", {"style": "English, piano", "lyrics": "Synthetic song", "variations": 2})
             self.assertEqual(response.status_code, 200, response.text)
-            self.assertNotIn("_prepared", response.json())
-            finished = self.wait(response.json())
-            self.addCleanup(api.jobs.pop, finished["id"], None)
-            self.assertEqual(finished["status"], "done", finished.get("error"))
-            self.assertEqual(len(calls), 3)
-            self.assertTrue(finished["result"]["generation"]["planning"]["analysis_reused"])
-            self.assertEqual(finished["result"]["generation"]["planning"]["seed"], 1234)
-            self.assertEqual(finished["result"]["params"]["seed"], 1235)
-            self.assertNotIn("_prepared", next(j for j in self.request("/api/jobs", method="GET").json() if j["id"] == finished["id"]))
-            self.setup_profile("bf16", "f32")
-            self.assertEqual(self.request("/api/generate", generate).status_code, 409)
-            api._plans[job["id"]]["created"] -= api.PLAN_TTL_S + 1
-            self.assertIn("expired", self.request("/api/generate", generate).json()["detail"])
+            job = self.wait(response.json())
+        self.addCleanup(api.jobs.pop, job["id"], None)
+        self.assertEqual(job["status"], "done", job.get("error"))
+        self.assertEqual(len(job["result"]["songs"]), 2)
+        self.assertEqual(len(calls), 5)  # one score plan, then two semantic/render pairs
+        self.assertEqual(calls[1]["options"]["abc"], calls[3]["options"]["abc"])
+        self.assertNotEqual(calls[2]["seed"], calls[4]["seed"])
+        self.assertNotEqual(calls[1]["seed"], calls[3]["seed"])
 
-    def test_fresh_install_and_unsupported_provider_cannot_start_analysis(self):
-        self.assertEqual(self.request("/api/duration-analysis", {"style": "Piano"}).status_code, 409)
-        self.assertFalse(self.requests)
+    def test_engine_analyzes_fits_and_generates_in_one_call(self):
         self.setup_profile()
-        self.assertEqual(self.request("/api/duration-analysis", {"style": "Piano"}).status_code, 422)
+        from studio import engine
+        adapter, calls, stages = YuE2Adapter(), [], []
+        def run(profile, request, cancel=None):
+            calls.append(copy.deepcopy(request))
+            if request["options"].get("stop_after") == "abc":
+                return {"artifacts": [artifact(score())]}
+            if request["options"].get("stop_after") == "semantic":
+                return {"artifacts": [artifact(json.dumps([1] * 1000), "false", "semantic")]}
+            return {"audio": tiny_audio(), "artifacts": [artifact(json.dumps([1] * 1000), "false", "semantic")]}
+        with patch.object(self.provider, "adapter", return_value=adapter), patch.object(self.provider, "run", side_effect=run):
+            result = engine.generate(GenerationParams(style="English, piano", lyrics="Synthetic song"),
+                profile=self.manager.snapshot(), progress=stages.append)
+        meta = json.loads(result.meta_path.read_text())
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(calls[0]["options"]["stop_after"], "abc")
+        self.assertEqual(calls[1]["options"]["stop_after"], "semantic")
+        self.assertEqual(meta["params"]["target_duration_s"], 40)
+        self.assertTrue(meta["generation"]["duration_analysis"]["automatic_target"])
+        self.assertIn("Analyzing lyrics", stages[0])
 
-    def test_running_analysis_can_be_cancelled_without_a_plan_or_song(self):
+    def test_arrangement_over_model_limit_fails_before_audio_and_suggests_edits(self):
         self.setup_profile()
         from studio import app as api
-        self.provider.hold_run = threading.Event()
-        with patch.object(self.provider, "adapter", return_value=YuE2Adapter()):
-            job = self.request("/api/duration-analysis", {"style": "Piano"}).json()
-            self.addCleanup(api.jobs.pop, job["id"], None)
-            deadline = time.monotonic() + 5
-            while not self.provider.calls and time.monotonic() < deadline:
-                time.sleep(0.01)
-            self.assertTrue(self.provider.calls)
-            self.assertEqual(self.request(f"/api/jobs/{job['id']}/cancel").status_code, 200)
-            self.assertEqual(self.wait(job)["status"], "cancelled")
-            self.assertNotIn(job["id"], api._plans)
-            self.assertFalse(list(self.root.glob("outputs/*")))
+        long_score = score(["C16"] * 200)
+        with patch.object(self.provider, "adapter", return_value=YuE2Adapter()), patch.object(
+                self.provider, "run", return_value={"artifacts": [artifact(long_score)]}) as run:
+            response = self.request("/api/generate", {"style": "English, piano", "lyrics": "Synthetic long song"})
+            self.assertEqual(response.status_code, 200, response.text)
+            job = self.wait(response.json())
+        self.addCleanup(api.jobs.pop, job["id"], None)
+        self.assertEqual(job["status"], "error")
+        self.assertIn("Shorten a verse or remove a repeated section", job["error"])
+        self.assertIn("complete-song limit is 330 seconds", job["error"])
+        self.assertEqual(len(run.call_args_list), 3)
+        self.assertFalse(list((self.root / "outputs").glob("*.wav")))
 
 
 class ScoreDurationTests(unittest.TestCase):
