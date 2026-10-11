@@ -23,8 +23,6 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=1234)
     ap.add_argument("--steps", type=int, dest="num_inference_steps")
     ap.add_argument("--guidance", type=float, dest="guidance_scale")
-    ap.add_argument("--max-duration", type=float, dest="max_duration_s", help="max length in seconds")
-    ap.add_argument("--target-duration", type=float, dest="target_duration_s", help="complete arrangement target in seconds; supported models plan before rendering")
     ap.add_argument("--abc-file", type=Path)
     ap.add_argument("--model-options", type=json.loads, default={}, help="JSON object with options for the selected model")
     ap.add_argument("--name", help="output file stem (default: timestamp-seed)")
@@ -34,6 +32,8 @@ def main() -> None:
     if not isinstance(a.model_options, dict):
         ap.error("--model-options must be a JSON object")
     options = dict(a.model_options)
+    if {"target_duration_s", "max_duration_s", "semantic_max_tokens"} & options.keys():
+        ap.error("Song length is inferred from the lyrics and style; duration controls are not accepted")
     for key, value in {"cot": a.cot, "num_inference_steps": a.num_inference_steps,
                        "guidance_scale": a.guidance_scale,
                        "abc": a.abc_file.read_text() if a.abc_file else None}.items():
@@ -42,7 +42,7 @@ def main() -> None:
                 ap.error(f"Conflicting model option: {key}")
             options[key] = value
     params = GenerationParams(lyrics=lyrics, instrumental=a.instrumental, style=a.style, seed=a.seed,
-                              max_duration_s=a.max_duration_s, target_duration_s=a.target_duration_s, model_options=options)
+                              model_options=options)
     try:
         if engine.health().get("setup_required"):
             sys.exit("Choose and activate a model first: run ./studio.sh and open Settings.")
@@ -50,7 +50,7 @@ def main() -> None:
         sys.exit(f"Model setup unavailable ({e}). Run ./studio.sh and open Settings.")
 
     print(f"Generating (seed={params.seed}) ...", flush=True)
-    res = engine.generate(params, a.name)
+    res = engine.generate(params, a.name, progress=lambda stage: print(f"  {stage}", flush=True))
     print(f"Saved {res.wav_path}  ({res.duration_s:.1f}s audio in {res.elapsed_s:.0f}s, "
           f"{res.sample_rate} Hz x{res.channels})")
     for k, p in res.artifacts.items():

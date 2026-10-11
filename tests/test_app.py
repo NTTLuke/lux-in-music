@@ -45,7 +45,36 @@ class ProductIdentityTests(unittest.TestCase):
         result = subprocess.run([sys.executable, "-m", "studio.cli", "--help"], cwd=ROOT, capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("--lyrics", result.stdout)
-        self.assertIn("--max-duration", result.stdout)
+        self.assertNotIn("--max-duration", result.stdout)
+        self.assertNotIn("--target-duration", result.stdout)
+
+    def test_create_page_has_no_manual_duration_or_separate_check(self):
+        page = self.get("/")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('id="duration-hint"', page.text)
+        self.assertNotIn('id="duration-mode"', page.text)
+        self.assertNotIn('id="len"', page.text)
+        self.assertNotIn("Analyze duration", page.text)
+        self.assertNotIn("duration.js", page.text)
+        script = self.get("/static/app.js")
+        self.assertEqual(script.status_code, 200)
+        self.assertNotIn("/api/duration-analysis", script.text)
+        self.assertIn("variations: state.variations", script.text)
+
+    def test_generation_api_schema_does_not_advertise_duration_controls(self):
+        schema = self.get("/openapi.json").json()
+        ref = schema["paths"]["/api/generate"]["post"]["requestBody"]["content"]["application/json"]["schema"]["$ref"]
+        fields = schema["components"]["schemas"][ref.rsplit("/", 1)[-1]]["properties"]
+        self.assertIn("variations", fields)
+        self.assertNotIn("target_duration_s", fields)
+        self.assertNotIn("max_duration_s", fields)
+        self.assertNotIn("semantic_max_tokens", fields)
+
+    def test_cli_rejects_duration_fields_in_generic_model_options(self):
+        result = subprocess.run([sys.executable, "-m", "studio.cli", "--style", "Piano",
+            "--model-options", '{"target_duration_s":120}'], cwd=ROOT, capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Song length is inferred", result.stderr)
 
     def test_engine_offline_health_remains_a_valid_ui_response(self):
         with patch("studio.engine.health", side_effect=RuntimeError("engine unavailable")):

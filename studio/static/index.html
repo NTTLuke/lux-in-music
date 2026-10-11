@@ -74,18 +74,9 @@ Sing with the sunrise, we are never alone.</textarea>
       </div>
 
       <div class="field">
-        <label for="duration-mode" id="duration-mode-label">Duration mode</label>
-        <select id="duration-mode"><option value="auto">Automatic duration (recommended)</option><option value="target">Complete arrangement · choose duration</option><option value="cap">Clip / hard limit</option></select>
-        <div id="duration-input">
-          <div class="label-row"><label for="len" id="len-label">Song duration</label><span class="value" id="len-val">3:00</span></div>
-          <input type="range" id="len" min="30" max="330" step="5" value="180">
-        </div>
-        <div class="hint" id="duration-hint"></div>
+        <label>Song length</label>
+        <div class="hint" id="duration-hint">Lux analyzes your lyrics, style and tempo when you click Create, then chooses a song length and prepares the arrangement before generating audio. Planning takes extra model processing time. The final performance may be shorter or vary from the plan.</div>
         <div class="hint" id="lyrics-advice" aria-live="polite"></div>
-        <div id="duration-guide" class="duration-guide" hidden>
-          <button type="button" class="btn" id="analyze-duration">Analyze duration</button>
-          <div id="duration-feedback" role="status" aria-live="polite" aria-atomic="true"></div>
-        </div>
       </div>
 
       <div class="field">
@@ -173,7 +164,6 @@ Sing with the sunrise, we are never alone.</textarea>
 </footer>
 <audio id="audio" preload="auto"></audio>
 <script src="/static/settings.js"></script>
-<script src="/static/duration.js"></script>
 <script src="/static/app.js"></script>
 <script src="/static/lux.js"></script>
 </body>

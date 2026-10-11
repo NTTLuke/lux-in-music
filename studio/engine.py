@@ -76,11 +76,47 @@ def analyze_duration(params, profile, progress=None, cancel=None):
 
 
 def generate(params: GenerationParams, name: str | None = None, profile: dict | None = None, progress=None,
-             cancel=None, prepared=None) -> GenerationResult:
+             cancel=None, prepared=None, on_prepared=None) -> GenerationResult:
     profile = get_manager().snapshot(profile)
     provider = get_provider(profile)
     adapter = provider.adapter(profile)
     normalized = adapter.normalize(params)
+    if (prepared is None and adapter.capabilities.get("duration_analysis")
+            and not getattr(normalized, "target_duration_s", None)):
+        if progress:
+            progress("Analyzing lyrics, style and tempo to choose the song length")
+        duration = adapter.analyze_duration(
+            params,
+            lambda request: provider.run(profile, request, cancel),
+            progress=progress,
+        )
+        summary = duration["analysis"]
+        target = summary.get("recommended_target_s")
+        if summary.get("status") == "too_long" or target is None:
+            seconds = summary.get("planned_duration_s")
+            limit = summary.get("max_target_s")
+            estimate = f" The shortest complete plan is about {seconds:.0f} seconds." if seconds else ""
+            ceiling = f" The selected model's complete-song limit is {limit:.0f} seconds." if limit else ""
+            suggestion = ("Edit or shorten the supplied score."
+                          if summary.get("supplied_score") else
+                          "Shorten a verse or remove a repeated section, then generate again.")
+            raise ValueError(
+                "This arrangement exceeds the selected model's complete-song limit."
+                f"{estimate}{ceiling} {suggestion}"
+            )
+        if cancel and cancel.is_set():
+            raise RuntimeError("Generation cancelled during song-length analysis.")
+        params = params.model_copy(update={"target_duration_s": target})
+        prepared = duration["prepared"]
+        prepared["report"]["duration_analysis"] = {
+            **summary,
+            "automatic_target": True,
+        }
+        if on_prepared:
+            on_prepared(params, prepared)
+        if progress:
+            progress(f"Arrangement fits · about {target // 60}:{target % 60:02d} · preparing audio")
+        normalized = adapter.normalize(params)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     title = params.title or auto_title(params.lyrics)
     stem = name or f"{time.strftime('%Y%m%d-%H%M%S')}-{slugify(title)}"
