@@ -40,7 +40,7 @@ class HarnessTests(unittest.TestCase):
         folder.mkdir(exist_ok=True)
         (folder / "requirements.json").write_text(json.dumps({
             "schema_version": 1,
-            "requirements": [{"id": "setup", "issue": "https://github.com/NTTLuke/lux-in-music/issues/3",
+            "requirements": [{"id": "setup", "issue": "https://github.com/lvxworld/lux-in-music/issues/3",
                               "description": "Open Settings", "status": status,
                               "tests": tests, "acceptance": ["Open a fresh install"]}],
         }))

@@ -88,7 +88,7 @@ def read_requirements(root: Path) -> list[dict]:
         ids.add(item["id"])
         if item["status"] not in {"planned", "implemented"}:
             raise ValueError(f"Invalid requirement status: {item['id']}")
-        if not item["issue"].startswith("https://github.com/NTTLuke/lux-in-music/issues/"):
+        if not item["issue"].startswith("https://github.com/lvxworld/lux-in-music/issues/"):
             raise ValueError(f"Missing project issue link: {item['id']}")
         if not isinstance(item["acceptance"], list) or not item["acceptance"] or not all(
             isinstance(step, str) and step.strip() for step in item["acceptance"]

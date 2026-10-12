@@ -3,7 +3,7 @@
   "requirements": [
     {
       "id": "product-naming",
-      "issue": "https://github.com/NTTLuke/lux-in-music/issues/4",
+      "issue": "https://github.com/lvxworld/lux-in-music/issues/4",
       "description": "Use Lux In Music product names and consistent package metadata.",
       "status": "implemented",
       "tests": [
@@ -18,7 +18,7 @@
     },
     {
       "id": "empty-install-settings",
-      "issue": "https://github.com/NTTLuke/lux-in-music/issues/2",
+      "issue": "https://github.com/lvxworld/lux-in-music/issues/2",
       "description": "Run studio with no models or engine and open Settings first.",
       "status": "implemented",
       "tests": [
@@ -34,7 +34,7 @@
     },
     {
       "id": "first-run-software-bootstrap",
-      "issue": "https://github.com/NTTLuke/lux-in-music/issues/2",
+      "issue": "https://github.com/lvxworld/lux-in-music/issues/2",
       "description": "Run studio.sh on a fresh checkout to prepare software and open the studio without weights.",
       "status": "implemented",
       "tests": [
@@ -52,7 +52,7 @@
     },
     {
       "id": "provider-boundaries",
-      "issue": "https://github.com/NTTLuke/lux-in-music/issues/2",
+      "issue": "https://github.com/lvxworld/lux-in-music/issues/2",
       "description": "Keep shared application behavior independent of a particular model.",
       "status": "implemented",
       "tests": [
@@ -67,7 +67,7 @@
     },
     {
       "id": "license-before-download",
-      "issue": "https://github.com/NTTLuke/lux-in-music/issues/3",
+      "issue": "https://github.com/lvxworld/lux-in-music/issues/3",
       "description": "Show model and component licenses before a user starts a download.",
       "status": "implemented",
       "tests": [
@@ -84,7 +84,7 @@
     },
     {
       "id": "independent-precision",
-      "issue": "https://github.com/NTTLuke/lux-in-music/issues/3",
+      "issue": "https://github.com/lvxworld/lux-in-music/issues/3",
       "description": "Choose exact main-model and VAE precisions separately.",
       "status": "implemented",
       "tests": [
@@ -102,7 +102,7 @@
     },
     {
       "id": "model-download-manager",
-      "issue": "https://github.com/NTTLuke/lux-in-music/issues/3",
+      "issue": "https://github.com/lvxworld/lux-in-music/issues/3",
       "description": "Download and activate complete model profiles from Settings.",
       "status": "implemented",
       "tests": [
@@ -119,7 +119,7 @@
     },
     {
       "id": "profile-provenance",
-      "issue": "https://github.com/NTTLuke/lux-in-music/issues/2",
+      "issue": "https://github.com/lvxworld/lux-in-music/issues/2",
       "description": "Keep each job and song tied to its effective model profile.",
       "status": "implemented",
       "tests": [
@@ -135,7 +135,7 @@
     },
     {
       "id": "natural-song-ending",
-      "issue": "https://github.com/NTTLuke/lux-in-music/issues/1",
+      "issue": "https://github.com/lvxworld/lux-in-music/issues/1",
       "description": "Guide song structure by duration and report forced truncation accurately.",
       "status": "implemented",
       "tests": [
@@ -150,7 +150,7 @@
     },
     {
       "id": "complete-arrangement-length",
-      "issue": "https://github.com/NTTLuke/lux-in-music/issues/18",
+      "issue": "https://github.com/lvxworld/lux-in-music/issues/18",
       "description": "Honor an explicit style BPM and report the best plan when Complete Arrangement cannot fit all lyrics.",
       "status": "implemented",
       "tests": [
@@ -164,7 +164,7 @@
     },
     {
       "id": "duration-analysis-review",
-      "issue": "https://github.com/NTTLuke/lux-in-music/issues/18",
+      "issue": "https://github.com/lvxworld/lux-in-music/issues/18",
       "description": "Infer and adapt song length inside a single generation flow from lyrics, style and tempo.",
       "status": "implemented",
       "tests": [
@@ -182,7 +182,7 @@
     },
     {
       "id": "manual-actions-release",
-      "issue": "https://github.com/NTTLuke/lux-in-music/issues/22",
+      "issue": "https://github.com/lvxworld/lux-in-music/issues/22",
       "description": "Start the shared versioned release process manually from main in GitHub Actions.",
       "status": "implemented",
       "tests": [
