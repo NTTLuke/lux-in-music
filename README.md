@@ -29,7 +29,7 @@ https://github.com/user-attachments/assets/51a82812-f433-4d41-804c-e34d2c7c23a7
 - Free disk space for the app, a model and your songs. The default YuE2 model
   files take about **4.5 GB**, in addition to the software and generated audio.
   Model file size is not the total memory needed to run it.
-- Access to [this GitHub repository](https://github.com/NTTLuke/lux-in-music).
+- Access to [this GitHub repository](https://github.com/lvxworld/lux-in-music).
   If GitHub shows a missing page, sign in with an account that has access.
 
 This guide covers macOS on Apple Silicon. Linux has a CPU setup path described
@@ -52,7 +52,7 @@ are already installed, continue to step 2.
 
 ### 2. Download Lux In Music
 
-1. Open [the latest release](https://github.com/NTTLuke/lux-in-music/releases/latest).
+1. Open [the latest release](https://github.com/lvxworld/lux-in-music/releases/latest).
 2. Under **Assets**, download `lux-in-music-v….zip`, which contains the complete
    app source for that version.
 3. In Finder, open **Downloads** and double-click the ZIP to extract it, if it
@@ -61,7 +61,7 @@ are already installed, continue to step 2.
    such as **Documents**. It contains a file called **studio.sh**. Use this same
    folder for future launches.
 
-For an earlier version, open [all releases](https://github.com/NTTLuke/lux-in-music/releases)
+For an earlier version, open [all releases](https://github.com/lvxworld/lux-in-music/releases)
 and download its ZIP the same way. The green **Code** → **Download ZIP** button
 gives the newest source instead, without a version number.
 
@@ -206,7 +206,7 @@ listens on every network, including public Wi-Fi. To use the studio from another
 computer you control, an SSH tunnel keeps it private:
 `ssh -L 8000:127.0.0.1:8000 your-mac`.
 
-For help, open [an issue](https://github.com/NTTLuke/lux-in-music/issues) and include
+For help, open [an issue](https://github.com/lvxworld/lux-in-music/issues) and include
 your Mac chip, memory, what step failed and the last relevant Terminal error lines.
 Keep lyrics and style prompts private. Do not attach song metadata, request
 files or logs containing them; describe the problem with the model, duration,
@@ -239,7 +239,7 @@ CLI can use the shared instructions and run `python3 scripts/check.py`. See
 [the harness guide](docs/harness.md) for application checks and CLI compatibility.
 
 Maintainers can build a version from GitHub: open
-[Actions → Release](https://github.com/NTTLuke/lux-in-music/actions/workflows/release.yml),
+[Actions → Release](https://github.com/lvxworld/lux-in-music/actions/workflows/release.yml),
 click **Run workflow**, select **main**, and choose patch/minor/major. Leave
 **Preview only** checked to run the tests and see the release plan. Uncheck it
 on a second run to publish the version and downloadable files. No models are
