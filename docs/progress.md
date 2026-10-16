@@ -1,5 +1,16 @@
 # Project handoff
 
+## Clean-environment CI dependency fix
+
+- Both push and pull-request jobs exposed a missing base dependency:
+  `vibe_runtime_status()` uses `packaging.version.Version`, but packaging was
+  only available through the optional embedding runtime on the development Mac.
+- Declare packaging directly in the application dependencies and refresh the
+  lock. Keep all embedding libraries and model downloads optional.
+- Verification: the full offline harness passes all 155 tests in a newly
+  created base-only environment. Confirmed that Torch, Sentence Transformers
+  and Pillow are absent, matching the optional-runtime boundary in Actions.
+
 ## Audio-reactive glow in the Vibe listening gallery
 
 Branch: `feat/lux-vibe-v0-1`.
