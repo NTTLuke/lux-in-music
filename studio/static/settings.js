@@ -53,7 +53,7 @@ const Settings = (() => {
     const on = visible();
     document.body.classList.toggle("settings-mode", on);
     $("nav-settings").classList.toggle("active", on);
-    if (on) { $("nav-create").classList.remove("active"); $("nav-lux").classList.remove("active"); render(); }
+    if (on) { $("nav-create").classList.remove("active"); $("nav-vibe").classList.remove("active"); $("nav-lux").classList.remove("active"); render(); }
   }
 
   function progress() {

@@ -5,6 +5,7 @@ import time
 import copy
 import base64
 import json
+from unittest.mock import patch
 
 from tests.test_models import ModelFixtures, tiny_audio
 
@@ -13,6 +14,11 @@ def main():
     parser = argparse.ArgumentParser(); parser.add_argument("--port", type=int, required=True)
     args = parser.parse_args()
     fixture = ModelFixtures(); fixture.setUp()
+    from studio.vibe import VibeManager
+    vibe = VibeManager(fixture.root / "vibe-models")
+    vibe.state_path = fixture.root / "vibe-state.json"
+    vibe_patch = patch("studio.vibe._manager", vibe)
+    vibe_patch.start(); fixture.addCleanup(vibe_patch.stop)
     fixture.catalog[0]["licenses"].append({"component": "Output permission", "id": "Creator terms",
         "url": "https://licenses.test/creator", "summary": "Individual creators may monetize outputs; company use needs a separate license.", "verified": True})
     external = copy.deepcopy(fixture.catalog[0])
@@ -25,7 +31,8 @@ def main():
     original_adapter = fixture.provider.adapter
     def adapter(profile):
         result = original_adapter(profile)
-        result.capabilities = {**result.capabilities, "semantic_edit": True}
+        result.capabilities = {**result.capabilities, "semantic_edit": True,
+            "options": ["semantic_temperature", "semantic_top_p", "semantic_top_k", "num_inference_steps"]}
         return result
     fixture.provider.adapter = adapter
     from studio import engine

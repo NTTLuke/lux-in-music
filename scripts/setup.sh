@@ -20,9 +20,11 @@ if ! command -v uv >/dev/null; then
 fi
 
 printf '\n[2/4] Preparing Python 3.12 and application dependencies…\n'
-uv sync --frozen --python 3.12
+# Keep optional runtimes explicitly installed through Settings. An exact base
+# sync would uninstall Vibe on every launch and force another runtime update.
+uv sync --frozen --python 3.12 --inexact
 if [ ! -x .venv/bin/studio-gen ]; then
-  uv sync --frozen --python 3.12 --reinstall-package lux-in-music
+  uv sync --frozen --python 3.12 --inexact --reinstall-package lux-in-music
 fi
 
 printf '\n[3/4] Preparing audio.cpp (software only; no model downloads)…\n'

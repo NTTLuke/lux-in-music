@@ -26,6 +26,10 @@ class BootstrapTests(unittest.TestCase):
         self.tool("uname", 'echo Linux')
         self.tool("uv", '''echo "uv $*" >> "$TEST_LOG"
 if [ "$1" = sync ]; then
+ case " $* " in
+  *" --inexact "*) ;;
+  *) rm -f .venv/vibe-runtime-installed ;;
+ esac
  mkdir -p .venv/bin
  printf '#!/bin/sh\\nif [ "$*" = "-m studio.bootstrap families" ]; then echo test_family; else echo "launch $*" >> "$TEST_LOG"; fi\\n' > .venv/bin/python
  printf '#!/bin/sh\\nexit 0\\n' > .venv/bin/studio-gen
@@ -68,6 +72,17 @@ chmod +x build/cpu-release/bin/audiocpp_server''')
         self.assertNotIn("git clone", self.log.read_text())
         self.assertNotIn("cmake --build", self.log.read_text())
         self.assertIn("build skipped", result.stdout)
+
+    def test_startup_preserves_explicitly_installed_optional_runtime(self):
+        runtime = self.root / ".venv" / "vibe-runtime-installed"
+        runtime.parent.mkdir()
+        runtime.write_text("installed through Settings")
+        for _ in range(2):
+            result = self.run_studio()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertTrue(runtime.is_file(), "startup removed the optional Vibe runtime")
+        self.assertNotIn("--extra", self.log.read_text())
+        self.assertFalse((self.root / "models").exists())
 
     def test_missing_uv_uses_the_local_installer_before_dependency_setup(self):
         stub = (self.bin / "uv").read_text()

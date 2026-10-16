@@ -112,6 +112,12 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px;
 .segmented button:hover { color: var(--text); }
 .segmented button.on { background: var(--raise-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-2); }
 .segmented.small button { padding: 7px 4px; }
+#cot button { position: relative; display: flex; align-items: center; justify-content: center; gap: 7px; }
+#cot .planning-help { display: none; position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); width: 260px; max-width: 75vw; padding: 13px 15px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--panel-solid); color: var(--text); box-shadow: 0 8px 30px #0008; font-size: 12px; line-height: 1.6; font-weight: 400; text-align: left; z-index: 30; }
+#cot button:first-child .planning-help { left: 0; transform: none; }
+#cot button:last-child .planning-help { left: auto; right: 0; transform: none; }
+#cot button:hover .planning-help, #cot button:focus-visible .planning-help { display: block; }
+.planning-note { margin: 8px 0 0; }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .row2 > div { display: flex; flex-direction: column; gap: 7px; }
 .seed-row { display: flex; gap: 6px; }

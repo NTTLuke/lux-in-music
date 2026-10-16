@@ -11,10 +11,13 @@ import threading
 import time
 import uuid
 import copy
+import itertools
+from email import policy
+from email.parser import BytesParser
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from typing import Literal
@@ -25,6 +28,9 @@ from . import audio, edit, engine, separate
 from .params import GenerationParams
 from .models import get_manager, SetupRequired
 from .providers import get_provider, close_providers
+from .vibe import get_vibe_manager, validate_image, MAX_IMAGE_BYTES, MAX_VIBE_IMAGES
+from .artwork import prepare_vibe_artwork, attach_vibe_artwork
+from starlette.concurrency import run_in_threadpool
 
 STATIC = Path(__file__).parent / "static"
 
@@ -33,6 +39,7 @@ async def lifespan(app):
     yield
     get_manager().close()
     close_providers()
+    get_vibe_manager().release()
 
 
 app = FastAPI(title="Lux In Music", lifespan=lifespan)
@@ -119,6 +126,8 @@ def _worker() -> None:
                 res = engine.generate(current, name=name, profile=job["profile"], progress=stage,
                     cancel=cancel, prepared=prepared_state.get("prepared"),
                     on_prepared=lambda selected, plan: prepared_state.update(params=selected, prepared=copy.deepcopy(plan)))
+                if job.get("_vibe_artwork"):
+                    attach_vibe_artwork(res.meta_path, job["_vibe_artwork"])
                 songs.append(json.loads(res.meta_path.read_text()))
                 job["completed_variations"] = len(songs)
                 if res.duration_s > 5:
@@ -136,6 +145,7 @@ def _worker() -> None:
         finally:
             job["finished"] = time.time()
             job.pop("_prepared", None)
+            job.pop("_vibe_artwork", None)
             with _jobs_lock:
                 _cancels.pop(job_id, None)
 
@@ -159,6 +169,117 @@ def settings_catalog():
 @app.get("/api/settings/status")
 def settings_status():
     return get_manager().status()
+
+
+@app.get("/api/vibe/status")
+def vibe_status():
+    return get_vibe_manager().status()
+
+
+class VibeInstallRequest(BaseModel):
+    license_review_id: str
+    accept_license: bool = False
+
+
+@app.post("/api/vibe/install")
+def vibe_install(req: VibeInstallRequest):
+    try:
+        return get_vibe_manager().start_install(req.license_review_id, req.accept_license)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+async def _vibe_upload_images(request: Request) -> list[bytes]:
+    max_request = MAX_IMAGE_BYTES * MAX_VIBE_IMAGES + 256 * 1024
+    if request.headers.get("content-length"):
+        try:
+            if int(request.headers["content-length"]) > max_request:
+                raise HTTPException(413, "Choose up to 5 images, no larger than 10 MB each")
+        except ValueError:
+            raise HTTPException(400, "Invalid request size")
+    chunks = bytearray()
+    async for chunk in request.stream():
+        chunks.extend(chunk)
+        if len(chunks) > max_request:
+            raise HTTPException(413, "Choose up to 5 images, no larger than 10 MB each")
+    content_type = request.headers.get("content-type", "").encode("ascii", "ignore")
+    if content_type.lower().startswith(b"multipart/form-data"):
+        message = BytesParser(policy=policy.default).parsebytes(
+            b"Content-Type: " + content_type + b"\r\nMIME-Version: 1.0\r\n\r\n" + bytes(chunks))
+        if not message.is_multipart() or message.defects:
+            raise HTTPException(400, "Invalid image upload")
+        parts = list(message.iter_parts())
+        if not 1 <= len(parts) <= MAX_VIBE_IMAGES:
+            raise HTTPException(422, "Choose between 1 and 5 images")
+        if any(part.get_param("name", header="content-disposition") not in {"image", "images"} for part in parts):
+            raise HTTPException(400, "Invalid image upload")
+        images = [part.get_payload(decode=True) or b"" for part in parts]
+    else:
+        images = [bytes(chunks)]
+    if any(len(data) > MAX_IMAGE_BYTES for data in images):
+        raise HTTPException(413, "Choose an image no larger than 10 MB")
+    return images
+
+
+def vibe_advanced_options(result):
+    try:
+        profile = get_manager().snapshot()
+        adapter = get_provider(profile).adapter(profile)
+    except (SetupRequired, ValueError):
+        return None
+    suggest = getattr(adapter, "vibe_options", None)
+    if not suggest:
+        return None
+    suggested = suggest(result.get("diversity", 0.0))
+    options = {key: value for key, value in suggested["options"].items()
+               if key in adapter.capabilities.get("options", [])}
+    return {**suggested, "options": options, "model_id": profile["model_id"]} if options else None
+
+
+@app.post("/api/vibe/analyze")
+async def vibe_analyze(request: Request):
+    manager = get_vibe_manager()
+    vibe_status = manager.status()
+    if not vibe_status["installed"]:
+        raise HTTPException(409, "EmbeddingGemma is not installed. Open Settings to install it.")
+    if (vibe_status.get("job") or {}).get("restart_required"):
+        raise HTTPException(503, "The Vibe runtime was updated. In the Terminal window running Lux, press Ctrl+C and wait for the server to stop; then run ./studio.sh again. Refreshing the browser does not restart the runtime.")
+    if not vibe_status.get("runtime_compatible", True):
+        if vibe_status.get("runtime_missing"):
+            raise HTTPException(503, "The Vibe image runtime is incomplete. Open Settings and select "
+                                "Update Vibe runtime. Your verified model files will be reused.")
+        version = vibe_status["runtime_version"] or "not installed"
+        raise HTTPException(503, f"Vibe needs Sentence Transformers 6.1.0 or newer; {version} is installed. "
+                            "Open Settings and select Update Vibe runtime. Your verified model files will be reused.")
+    uploads = await _vibe_upload_images(request)
+    def perform_analysis():
+        def decoded_images():
+            for data in uploads:
+                try:
+                    yield validate_image(data)
+                except ValueError as error:
+                    raise HTTPException(422, str(error)) from error
+        images = iter(decoded_images())
+        first = next(images)
+        return (manager.analyze(first) if len(uploads) == 1
+                else manager.analyze_many(itertools.chain([first], images)))
+    started = time.monotonic()
+    try:
+        result = await run_in_threadpool(perform_analysis)
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(503, "Local image analysis failed. Check the Vibe model installation in Settings.") from error
+    return {"entry_id": result["id"], "style": result["style"],
+            "entry_ids": result.get("entry_ids", [result["id"]]), "image_count": len(uploads),
+            "advanced": vibe_advanced_options(result),
+            "elapsed_s": round(time.monotonic() - started, 2)}
+
+
+@app.post("/api/vibe/release")
+def vibe_release():
+    get_vibe_manager().release()
+    return {"ok": True}
 
 
 class ModelSetup(BaseModel):
@@ -200,8 +321,16 @@ def _public_job(job):
     return {key: value for key, value in job.items() if not key.startswith("_")}
 
 
+class VibeImageRequest(BaseModel):
+    image: str = Field(..., min_length=1, max_length=14 * 1024 * 1024)
+    entry_id: str = Field(..., min_length=1, max_length=80)
+
+
 class GenerateRequest(GenerationParams):
     variations: int = Field(1, ge=1, le=4)
+    vibe_image: str | None = Field(None, max_length=14 * 1024 * 1024)
+    vibe_entry_id: str | None = Field(None, max_length=80)
+    vibe_images: list[VibeImageRequest] | None = Field(None, min_length=1, max_length=MAX_VIBE_IMAGES)
 
 
 @app.post("/api/generate")
@@ -212,13 +341,16 @@ def api_generate(req: GenerateRequest):
             or any(key in supplied_options for key in length_controls)):
         raise HTTPException(422, "Lux chooses the song length automatically from the lyrics and style.")
     variations = getattr(req, "variations", 1)
-    params = GenerationParams(**req.model_dump(exclude={"variations"}, exclude_none=True))
+    params = GenerationParams(**req.model_dump(exclude={"variations", "vibe_image", "vibe_entry_id", "vibe_images"}, exclude_none=True))
     try:
         profile = get_manager().snapshot()
         adapter = get_provider(profile).adapter(profile)
         if params.instrumental and not adapter.capabilities.get("instrumental"):
             raise ValueError("The selected model cannot generate instrumental music")
         params = adapter.normalize(params)
+        images = getattr(req, "vibe_images", None)
+        artwork = prepare_vibe_artwork(getattr(req, "vibe_image", None), getattr(req, "vibe_entry_id", None),
+                                      [image.model_dump() for image in images] if images is not None else None)
     except SetupRequired as error:
         raise HTTPException(409, str(error)) from error
     except ValueError as error:
@@ -227,6 +359,8 @@ def api_generate(req: GenerateRequest):
     jobs[job_id] = {"id": job_id, "kind": "generate", "status": "queued", "created": time.time(),
                     "params": params.model_dump(exclude_none=True), "profile": profile,
                     "variations": variations}
+    if artwork:
+        jobs[job_id]["_vibe_artwork"] = artwork
     _queue.put(job_id)
     return _public_job(jobs[job_id])
 
@@ -246,6 +380,7 @@ def api_cancel_job(job_id: str):
             raise HTTPException(404)
         if job["status"] == "queued":
             job.update(status="cancelled", finished=time.time())
+            job.pop("_vibe_artwork", None)
         elif job["status"] == "running" and job["kind"] == "generate" and job_id in _cancels:
             # ponytail: generation only; separation/stem edits run several steps that do not check cancel yet.
             _cancels[job_id].set()
@@ -253,7 +388,7 @@ def api_cancel_job(job_id: str):
             get_provider(job["profile"]).cancel(job["profile"])
         else:
             raise HTTPException(409, f"job is {job['status']}")
-    return job
+    return _public_job(job)
 
 
 @app.delete("/api/jobs/{job_id}")

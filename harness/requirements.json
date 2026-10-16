@@ -46,6 +46,7 @@
         "Show software installation stages and native build progress before opening the UI.",
         "Install no generation or separation model weights.",
         "Repeat startup reuses a compatible build.",
+        "Startup preserves optional runtime packages explicitly installed through Settings without requesting extras on a fresh install.",
         "Missing system compiler prerequisites produce an actionable message.",
         "The UI listens on 127.0.0.1 unless --host is given, and warns that the studio has no login when it listens elsewhere."
       ]
@@ -56,13 +57,17 @@
       "description": "Keep shared application behavior independent of a particular model.",
       "status": "implemented",
       "tests": [
-        "tests.test_models.ProviderBoundaryTests"
+        "tests.test_models.ProviderBoundaryTests",
+        "tests.test_vibe"
       ],
       "acceptance": [
         "YuE2-specific request mapping belongs in its adapter.",
         "A fake provider runs the shared queue/result flow without audio.cpp.",
         "The UI offers only capabilities reported by the selected model.",
-        "Generation and separation setup are independent."
+        "Generation and separation setup are independent.",
+        "Vibe image bytes stay outside music-model inputs and public queue payloads; completed variations own separate cover and gallery artifacts.",
+        "Vibe accepts at most five images, blends real normalized embeddings against at least 120 curated directions, and filters Advanced suggestions through adapter capabilities.",
+        "Every image-guided YuE2 preset suggests 8 rendering steps while temperature, top-p and top-k can vary."
       ]
     },
     {

@@ -223,52 +223,6 @@
           "release_revision": "e479ac197bae727f69574261a8025696bc51de48"
         }
       ]
-    },
-    {
-      "id": "sam-audio",
-      "name": "SAM Audio base",
-      "provider": "audio.cpp",
-      "family": "sam_audio",
-      "task": "s2s",
-      "input_audio": {
-        "sample_rate": 48000,
-        "channels": 2
-      },
-      "mode_id": "anything",
-      "revision": "d429aa7d3a8a5a41ad05d83a57177a98e596ee7f",
-      "install_dir": "sep/SAM-Audio-GGUF",
-      "description": "Optional separation of a sound described in text.",
-      "precisions": {
-        "q8_0": {
-          "path": "sam-audio-base-q8_0.gguf",
-          "size": 3095951072,
-          "sha256": "e5529e940218981b67be2c58904ffca7b7eecba20b65e2e99e7d23eb5eb7bd9b",
-          "git_sha1": null,
-          "url": "https://huggingface.co/audio-cpp/SAM-Audio-GGUF/resolve/d429aa7d3a8a5a41ad05d83a57177a98e596ee7f/sam-audio-base-q8_0.gguf"
-        }
-      },
-      "vaes": {},
-      "default_precision": "q8_0",
-      "default_vae": null,
-      "required": [],
-      "licenses": [
-        {
-          "component": "SAM Audio weights",
-          "id": "SAM License",
-          "url": "https://huggingface.co/audio-cpp/SAM-Audio-GGUF/blob/d429aa7d3a8a5a41ad05d83a57177a98e596ee7f/LICENSE",
-          "summary": "Custom Meta terms. Read the permitted use and redistribution conditions.",
-          "verified": true,
-          "release_revision": "d429aa7d3a8a5a41ad05d83a57177a98e596ee7f"
-        },
-        {
-          "component": "Included T5 encoder",
-          "id": "Apache-2.0",
-          "url": "https://huggingface.co/audio-cpp/SAM-Audio-GGUF/blob/d429aa7d3a8a5a41ad05d83a57177a98e596ee7f/LICENSE-T5",
-          "summary": "Preserve required notices and review the full Apache license.",
-          "verified": true,
-          "release_revision": "d429aa7d3a8a5a41ad05d83a57177a98e596ee7f"
-        }
-      ]
     }
   ]
 }

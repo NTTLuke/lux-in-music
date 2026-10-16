@@ -8,6 +8,14 @@ from studio.providers import ROOT, get_provider
 
 
 class CatalogTests(unittest.TestCase):
+    def test_retired_sam_model_cannot_be_selected_or_downloaded(self):
+        with tempfile.TemporaryDirectory() as root:
+            manager = ModelManager(Path(root) / "state", Path(root) / "models")
+            self.assertNotIn("sam-audio", manager.catalog)
+            self.assertFalse(any(m.get("mode_id") == "anything" for m in manager.catalog.values()))
+            with self.assertRaisesRegex(ValueError, "Unknown model"):
+                manager.profile("sam-audio")
+
     def test_yue2_keeps_base_weight_terms_and_pins_the_creator_permission(self):
         model = next(m for m in json.loads((ROOT / "config/model-catalog.json").read_text())["models"] if m["id"] == "yue2-3b")
         self.assertEqual([l["id"] for l in model["licenses"][:2]], ["CC-BY-NC-4.0", "CC-BY-NC-4.0"])

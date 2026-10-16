@@ -11,6 +11,7 @@ const ICON = {
 /* ---------- static config ---------- */
 
 const SECTIONS = ["Intro", "Verse", "Pre-Chorus", "Chorus", "Bridge", "Outro"];
+const DEFAULT_LYRICS = $("lyrics").value;
 const CHIPS = {
   Genre: ["pop", "indie pop", "rock", "hip hop", "r&b", "electronic", "melodic techno", "progressive house", "EDM", "trance", "techno", "synthwave", "lo-fi", "jazz", "funk", "folk", "country", "metal", "soul", "house", "reggae", "cinematic"],
   Mood: ["uplifting", "melancholic", "dreamy", "energetic", "romantic", "dark", "chill", "epic", "hypnotic", "euphoric", "nostalgic"],
@@ -139,6 +140,7 @@ function setupGenreTemplates() {
   $("template-grid").onclick = (event) => {
     const button = event.target.closest("[data-template]"); if (!button) return;
     const template = GENRE_TEMPLATES.find((item) => item.id === button.dataset.template);
+    window.Vibe?.clearCreateReference();
     $("lyrics").value = DEMOS.find((demo) => demo.id === "lux-tenebris").params.lyrics;
     updateLyricsCount();
     $("style").value = template.style;
@@ -156,6 +158,10 @@ const audio = $("audio");
 /* ---------- generative covers ---------- */
 
 const coverCache = new Map();
+function songCover(song, size = 256) {
+  return song?.vibe && song.artifacts?.vibe_image ? `/outputs/${encodeURIComponent(song.artifacts.vibe_image)}` : cover(song.name, size);
+}
+function vibeImageCount(song) { return song.vibe?.image_count || song.vibe?.images?.length || 1; }
 function hash(str) { let h = 2166136261; for (const c of str) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
 function rng(seed) { return () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const PIGMENTS = ["#d9a441", "#3f5f8a", "#7f9f72", "#8e6a8f", "#b5552e", "#4f8a8b", "#c98a3a", "#5a6f9e"];
@@ -313,7 +319,7 @@ function setupForm() {
     `<div class="chip-group"><span class="gname">${g}</span>${list.map((c) => `<button type="button" class="chip" data-c="${esc(c)}">${esc(c)}</button>`).join("")}</div>`).join("");
   $("chips").onclick = (e) => { const c = e.target.dataset.c; if (c) toggleStyleTag(c); };
   $("style").oninput = syncChips; syncChips();
-  $("style-clear").onclick = () => { $("style").value = "English, "; syncChips(); $("style").focus(); };
+  $("style-clear").onclick = () => { window.Vibe?.clearCreateReference(); $("style").value = "English, "; syncChips(); $("style").focus(); };
 
   segmented("cot", (v) => {
     state.cot = v;
@@ -401,9 +407,10 @@ async function submit(e) {
   state.submitting = true;
   $("go").disabled = true;
   try {
+    const vibeReference = await window.Vibe?.generationReference() || {};
     const seed = random ? Math.floor(Math.random() * 2 ** 31) : seed0;
     const r = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...base, seed, variations: state.variations }) });
+      body: JSON.stringify({ ...base, ...vibeReference, seed, variations: state.variations }) });
     if (!r.ok) {
       const d = (await r.json()).detail;
       $("form-error").textContent = Array.isArray(d) ? d.map((x) => `${x.loc.slice(1).join(".") || "request"}: ${x.msg}`).join("\n") : String(d);
@@ -414,6 +421,7 @@ async function submit(e) {
 }
 
 function loadIntoForm(p) {
+  window.Vibe?.clearCreateReference();
   p = { ...p, ...(p.model_options || {}) };
   $("title").value = p.title || "";
   $("instrumental").checked = Boolean(p.instrumental);
@@ -476,8 +484,8 @@ function render() {
   }).join("");
   const songRows = songs.map((s) => `
     <div class="song ${state.current?.name === s.name ? "playing" : ""}" data-name="${esc(s.name)}">
-      <div class="cover"><img src="${cover(s.name, 128)}" alt=""><div class="ov"><svg viewBox="0 0 24 24">${state.current?.name === s.name && !audio.paused ? ICON.pause : ICON.play}</svg></div><span class="dur">${fmt(s.duration_s)}</span></div>
-      <div class="s-main"><div class="s-title">${esc(s.title)}${cotBadge(s.params.cot)}${endingBadge(s)}${s.edit ? `<span class="badge">edit ${fmt(s.edit.start_s)}–${fmt(s.edit.end_s)}</span>` : ""}</div>
+      <div class="cover"><img src="${songCover(s, 128)}" alt=""><div class="ov"><svg viewBox="0 0 24 24">${state.current?.name === s.name && !audio.paused ? ICON.pause : ICON.play}</svg></div><span class="dur">${fmt(s.duration_s)}</span></div>
+      <div class="s-main"><div class="s-title">${esc(s.title)}${s.vibe ? `<span class="badge">Vibe · ${vibeImageCount(s) > 1 ? `${vibeImageCount(s)} images` : "Image inspired"}</span>` : ""}${cotBadge(s.params.cot)}${endingBadge(s)}${s.edit ? `<span class="badge">edit ${fmt(s.edit.start_s)}–${fmt(s.edit.end_s)}</span>` : ""}</div>
         <div class="s-tags">${tagsHtml(s.params.style)}</div>
         <div class="s-sub">seed ${s.params.seed} · made in ${fmt(s.elapsed_s)} · ${esc((s.created || "").replace("T", " ").slice(0, 16))}</div></div>
       <canvas class="mini-wave"></canvas>
@@ -566,9 +574,11 @@ function flash(name) {
 /* ---------- player ---------- */
 
 function setTrack(s) {
+  VibePlayer.reset();
   state.current = s;
   audio.src = `/outputs/${encodeURIComponent(s.name)}.wav`;
-  $("p-cover").src = cover(s.name, 128);
+  $("p-cover").src = songCover(s, 128);
+  $("p-artwork").disabled = !s.artifacts?.vibe_image;
   $("p-title").textContent = s.title;
   $("p-style").textContent = s.params.style;
   $("p-dl").href = audio.src;
@@ -603,8 +613,8 @@ function drawPlayer() {
   const row = state.current && document.querySelector(`.song[data-name="${CSS.escape(state.current.name)}"] .mini-wave`);
   if (row) drawWave(row, state.current.peaks, prog, { bar: 2, gap: 2, dim: "rgba(236,230,220,.14)" });
 }
-audio.addEventListener("play", () => { syncPlayIcons(); if (window.Lux) Lux.pause(); });
-audio.addEventListener("pause", syncPlayIcons);
+audio.addEventListener("play", () => { syncPlayIcons(); if (window.Lux) Lux.pause(); VibePlayer.onPlay(); });
+audio.addEventListener("pause", () => { syncPlayIcons(); VibePlayer.onPause(); });
 audio.addEventListener("timeupdate", drawPlayer);
 audio.addEventListener("loadedmetadata", () => { $("p-dur").textContent = fmt(audio.duration); drawPlayer(); });
 audio.addEventListener("ended", () => step(1));
@@ -619,13 +629,102 @@ $("p-wave").onclick = (e) => {
   audio.currentTime = ((e.clientX - r.left) / r.width) * audio.duration;
 };
 document.addEventListener("keydown", (e) => {
-  if (e.target.matches("input, textarea")) return;
+  if (e.key === "Escape" && VibePlayer.visible()) { e.preventDefault(); VibePlayer.close(); return; }
+  if (e.target.matches("input, textarea, select, button, a, [contenteditable]")) return;
   if (e.code === "Space") { e.preventDefault(); if (window.Lux && Lux.visible()) Lux.toggle(); else togglePlay(); }
   if (e.key === "Escape") closeDrawer();
   if (e.key === "ArrowRight" && audio.duration) audio.currentTime += 5;
   if (e.key === "ArrowLeft" && audio.duration) audio.currentTime -= 5;
 });
 window.addEventListener("resize", () => { drawPlayer(); drawMiniWaves(); });
+
+const VibePlayer = (() => {
+  const view = $("vibe-listening"), reduced = matchMedia("(prefers-reduced-motion: reduce)");
+  const layers = [$("vibe-listening-image"), $("vibe-listening-image-next")];
+  const backdrops = [$("vibe-listening-backdrop"), $("vibe-listening-backdrop-next")];
+  let dismissed = null, shown = null, hideTimer = null, slideTimer = null, focusBefore = null;
+  let gallery = [], index = 0, activeLayer = 0, sequence = 0, paused = false;
+  function controls() {
+    $("vibe-carousel-controls").hidden = gallery.length < 2;
+    $("vibe-slide-count").textContent = `${index + 1} / ${gallery.length}`;
+    $("vibe-slide-count").setAttribute("aria-live", paused || audio.paused ? "polite" : "off");
+    $("vibe-slide-pause").textContent = reduced.matches ? "Manual slideshow" : paused ? "Resume slideshow" : "Pause slideshow";
+    $("vibe-slide-pause").disabled = reduced.matches;
+  }
+  function schedule() {
+    clearTimeout(slideTimer);
+    controls();
+    if (shown && shown.name === state.current?.name && gallery.length > 1 && !paused && !audio.paused && !reduced.matches && !document.hidden) {
+      slideTimer = setTimeout(() => advance(1), 8000);
+    }
+  }
+  function close(restoreFocus = true, immediate = false) {
+    dismissed = shown?.name || dismissed;
+    shown = null; sequence++;
+    window.VibeEffects?.hide();
+    view.classList.remove("open");
+    clearTimeout(hideTimer); clearTimeout(slideTimer);
+    if (immediate) view.hidden = true;
+    else hideTimer = setTimeout(() => { view.hidden = true; }, 500);
+    if (restoreFocus && focusBefore?.isConnected) focusBefore.focus({ preventScroll: true });
+  }
+  async function slide(next, first = false) {
+    clearTimeout(slideTimer);
+    const request = ++sequence, song = shown, layer = first ? 0 : 1 - activeLayer;
+    const image = layers[layer], backdrop = backdrops[layer];
+    image.src = gallery[next]; backdrop.src = gallery[next];
+    image.alt = `Vibe inspiration image ${next + 1} of ${gallery.length}`;
+    try {
+      await Promise.all([image.decode(), backdrop.decode()]);
+      if (!song || shown !== song || request !== sequence) return;
+      index = next; activeLayer = layer;
+      layers.forEach((el, i) => { el.classList.toggle("active", i === layer); el.setAttribute("aria-hidden", String(i !== layer)); });
+      backdrops.forEach((el, i) => el.classList.toggle("active", i === layer));
+      controls();
+      if (first) requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (shown === song && request === sequence) {
+          view.classList.add("open"); $("vibe-listening-close").focus({ preventScroll: true }); schedule();
+          window.VibeEffects?.show();
+        }
+      }));
+      else schedule();
+    } catch {
+      if (shown === song && request === sequence) {
+        if (first) close(false, true);
+        else $("vibe-slide-count").textContent = "Image unavailable. Try the next image.";
+      }
+    }
+  }
+  function advance(direction) {
+    if (shown && gallery.length > 1) slide((index + direction + gallery.length) % gallery.length);
+  }
+  function open(song) {
+    if (!song?.vibe || !song.artifacts?.vibe_image) return;
+    if (shown?.name === song.name && !view.hidden) { schedule(); window.VibeEffects?.show(); return; }
+    clearTimeout(hideTimer); clearTimeout(slideTimer);
+    focusBefore = document.activeElement === document.body ? $("p-artwork") : document.activeElement;
+    shown = song; paused = false;
+    gallery = song.vibe.images?.length ? song.vibe.images.map(image => `/outputs/${encodeURIComponent(image.file)}`) : [songCover(song)];
+    $("vibe-listening-title").textContent = song.title;
+    $("vibe-listening-subtitle").textContent = gallery.length > 1 ? `Inspired by ${gallery.length} Vibe images` : "Inspired by your Vibe image";
+    view.hidden = false;
+    layers.forEach(el => el.classList.remove("active"));
+    backdrops.forEach(el => el.classList.remove("active"));
+    slide(0, true);
+  }
+  $("vibe-listening-close").onclick = () => close();
+  $("p-artwork").onclick = () => open(state.current);
+  $("vibe-slide-prev").onclick = () => advance(-1);
+  $("vibe-slide-next").onclick = () => advance(1);
+  $("vibe-slide-pause").onclick = () => { paused = !paused; schedule(); };
+  reduced.addEventListener("change", schedule);
+  document.addEventListener("visibilitychange", schedule);
+  window.addEventListener("hashchange", () => close(false));
+  return { open, close, visible: () => !view.hidden,
+    reset: () => { close(false, true); dismissed = null; },
+    onPause: () => { clearTimeout(slideTimer); controls(); },
+    onPlay: () => { if (state.current?.name !== dismissed) open(state.current); } };
+})();
 
 /* ---------- drawer ---------- */
 
@@ -641,10 +740,11 @@ async function openDrawer(s) {
     ["Sample rate", `${s.sample_rate / 1000} kHz · ${s.channels === 2 ? "stereo" : "mono"}`], ["Created", (s.created || "").replace("T", " ").slice(0, 16)],
     ...SLIDERS.filter((x) => p[x.id] != null).map((x) => [x.label, p[x.id]])];
   $("drawer").innerHTML = `
-    <div class="d-hero"><img src="${cover(s.name, 512)}" alt=""><button class="icon-btn d-close" data-act="close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="d-hero"><img src="${songCover(s, 512)}" alt=""><button class="icon-btn d-close" data-act="close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div class="d-body">
       <div><h2 class="d-title">${esc(s.title)}</h2><div class="d-style">${esc(p.style)}</div></div>
       ${s.generation?.message ? `<p class="hint">${esc(s.generation.message)}</p>` : endingBadge(s)}
+      ${s.vibe ? `<div class="d-sec"><h4>Image inspiration · Lux Vibe</h4><p class="hint">${vibeImageCount(s) > 1 ? `${vibeImageCount(s)} images inspired this song’s musical direction. They are saved locally with its composite cover and listening gallery.` : "This song’s musical direction was inspired by an image. The image is saved locally as its cover."}</p><button class="btn" data-act="dimage">${vibeImageCount(s) > 1 ? "View inspiration gallery" : "View inspiration image"}</button></div>` : ""}
       <div class="d-actions">
         <button class="btn primary" data-act="dplay"><svg viewBox="0 0 24 24">${ICON.play}</svg>Play</button>
         <button class="btn lux-cta" data-act="dlux"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Open in Studio Mode</button>
@@ -668,6 +768,7 @@ $("drawer").onclick = (e) => {
   const act = e.target.closest("[data-act]")?.dataset.act, s = state.drawerSong;
   if (act === "close") closeDrawer();
   if (act === "dplay") togglePlay(s);
+  if (act === "dimage") VibePlayer.open(s);
   if (act === "dreuse") { closeDrawer(); loadIntoForm(s.params); }
   if (act === "dlux") { closeDrawer(); Lux.open(s.name); }
   if (act === "ddelete") deleteSong(s);
@@ -677,6 +778,9 @@ async function deleteSong(s) {
   const r = await fetch(`/api/songs/${encodeURIComponent(s.name)}`, { method: "DELETE" });
   if (!r.ok) { $("d-error").textContent = (await r.json().catch(() => ({}))).detail || "Could not delete this song."; return; }
   if (state.current?.name === s.name) {
+    VibePlayer.reset();
+    $("p-artwork").disabled = true;
+    $("p-cover").removeAttribute("src");
     audio.pause(); audio.removeAttribute("src"); state.current = null;
     $("p-title").textContent = "Nothing playing"; $("p-style").textContent = ""; $("p-dl").removeAttribute("href");
   }
