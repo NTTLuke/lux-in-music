@@ -224,5 +224,120 @@
         }
       ]
     }
+  ],
+  "optional_models": [
+    {
+      "id": "embeddinggemma-2",
+      "name": "EmbeddingGemma 2",
+      "repo": "google/embeddinggemma-2",
+      "revision": "c3f2237ce16fe33d1bb9dab8692c29c79865bdeb",
+      "install_dir": "vibe",
+      "description": "Optional local image and text embeddings for Lux Vibe.",
+      "model_card_url": "https://ai.google.dev/gemma/docs/embeddinggemma/model_card_2",
+      "files": [
+        {
+          "path": "1_Pooling/config.json",
+          "size": 90,
+          "sha256": null,
+          "git_sha1": "2730fc1de168630e474c4066987f46d091de2189",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/c3f2237ce16fe33d1bb9dab8692c29c79865bdeb/1_Pooling/config.json"
+        },
+        {
+          "path": "2_Normalize/config.json",
+          "size": 97,
+          "sha256": null,
+          "git_sha1": "8babba92405167e8718211dc51f44fb117e423e4",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/c3f2237ce16fe33d1bb9dab8692c29c79865bdeb/2_Normalize/config.json"
+        },
+        {
+          "path": "chat_template.jinja",
+          "size": 1016,
+          "sha256": null,
+          "git_sha1": "8df4ab8961aa08b66b470c5adbdc51374aabb63b",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/c3f2237ce16fe33d1bb9dab8692c29c79865bdeb/chat_template.jinja"
+        },
+        {
+          "path": "config.json",
+          "size": 4455,
+          "sha256": null,
+          "git_sha1": "dc524b2cbef566d66d8533c67dc68a6a8f5d340a",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/c3f2237ce16fe33d1bb9dab8692c29c79865bdeb/config.json"
+        },
+        {
+          "path": "config_sentence_transformers.json",
+          "size": 1565,
+          "sha256": null,
+          "git_sha1": "ba7dd4d5481cbaf271d5e8d1ad4271c5a45d2fd7",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/c3f2237ce16fe33d1bb9dab8692c29c79865bdeb/config_sentence_transformers.json"
+        },
+        {
+          "path": "model.safetensors",
+          "size": 1488915288,
+          "sha256": "197a32965d4b1105faf060417baa899e193fb73cd401f42ec9295234d5553d79",
+          "git_sha1": null,
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/c3f2237ce16fe33d1bb9dab8692c29c79865bdeb/model.safetensors"
+        },
+        {
+          "path": "modules.json",
+          "size": 413,
+          "sha256": null,
+          "git_sha1": "1ab20c8ab29b8338488b415e5c09af14b742fe3d",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/c3f2237ce16fe33d1bb9dab8692c29c79865bdeb/modules.json"
+        },
+        {
+          "path": "preprocessor_config.json",
+          "size": 511,
+          "sha256": null,
+          "git_sha1": "4adff307a29874c969eda7edb5d3f07faaef879d",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/c3f2237ce16fe33d1bb9dab8692c29c79865bdeb/preprocessor_config.json"
+        },
+        {
+          "path": "processor_config.json",
+          "size": 1788,
+          "sha256": null,
+          "git_sha1": "63043a5a2fd2e25a2fc5336fcdaf24e515d12289",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/c3f2237ce16fe33d1bb9dab8692c29c79865bdeb/processor_config.json"
+        },
+        {
+          "path": "sentence_bert_config.json",
+          "size": 747,
+          "sha256": null,
+          "git_sha1": "b3b98f8308641875fca1e4ddbfae5f38996bb54f",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/c3f2237ce16fe33d1bb9dab8692c29c79865bdeb/sentence_bert_config.json"
+        },
+        {
+          "path": "tokenizer.json",
+          "size": 32170510,
+          "sha256": "4d777ef5bdc1aa36227abdfb77c3e49e7b9c892d16e1b6bda41c393504828be4",
+          "git_sha1": null,
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/c3f2237ce16fe33d1bb9dab8692c29c79865bdeb/tokenizer.json"
+        },
+        {
+          "path": "tokenizer.model",
+          "size": 4689013,
+          "sha256": "e594c8a90eb08d8bda498ff4747977dc827ae0c3c56b5c0d41a605a22d02ef03",
+          "git_sha1": null,
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/c3f2237ce16fe33d1bb9dab8692c29c79865bdeb/tokenizer.model"
+        },
+        {
+          "path": "tokenizer_config.json",
+          "size": 1599,
+          "sha256": null,
+          "git_sha1": "a9afd12fb3ca2c418fd405320ace85ad46748d03",
+          "url": "https://huggingface.co/google/embeddinggemma-2/resolve/c3f2237ce16fe33d1bb9dab8692c29c79865bdeb/tokenizer_config.json"
+        }
+      ],
+      "licenses": [
+        {
+          "component": "Model weights",
+          "id": "Apache-2.0",
+          "url": "https://huggingface.co/google/embeddinggemma-2/blob/c3f2237ce16fe33d1bb9dab8692c29c79865bdeb/README.md",
+          "summary": "Released under Google's Gemma 4 license, which is Apache 2.0. Preserve required notices and review the full license.",
+          "verified": true,
+          "release_revision": "c3f2237ce16fe33d1bb9dab8692c29c79865bdeb",
+          "upstream_source": "https://ai.google.dev/gemma/docs/gemma_4_license"
+        }
+      ]
+    }
   ]
 }

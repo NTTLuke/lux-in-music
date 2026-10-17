@@ -38,6 +38,20 @@ class CatalogTests(unittest.TestCase):
                 self.assertGreater(file["size"], 0)
                 self.assertRegex(file.get("sha256") or file["git_sha1"], r"^[0-9a-f]{40}([0-9a-f]{24})?$")
 
+    def test_optional_models_pin_every_file_hash_and_license(self):
+        for model in json.loads((ROOT / "config/model-catalog.json").read_text())["optional_models"]:
+            self.assertRegex(model["revision"], r"^[0-9a-f]{40}$")
+            self.assertTrue(model["licenses"])
+            for license in model["licenses"]:
+                self.assertTrue(license["verified"])
+                self.assertTrue(license["url"].startswith("https://"))
+                self.assertEqual(license["release_revision"], model["revision"])
+            self.assertTrue(any(file["path"].endswith(".safetensors") and file["sha256"] for file in model["files"]))
+            for file in model["files"]:
+                self.assertIn(f"/resolve/{model['revision']}/", file["url"])
+                self.assertGreater(file["size"], 0)
+                self.assertRegex(file.get("sha256") or file["git_sha1"], r"^[0-9a-f]{40}([0-9a-f]{24})?$")
+
     def test_yue2_main_precision_and_default_vae_are_independent(self):
         with tempfile.TemporaryDirectory() as root:
             manager = ModelManager(Path(root) / "state", Path(root) / "models")

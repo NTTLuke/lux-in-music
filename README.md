@@ -134,8 +134,8 @@ for commercial use. Licenses are shown before each download.
 
 ### Optional: suggest a style from an image
 
-Open **Settings** and find **EmbeddingGemma 2**. Review the Apache-2.0 license
-and Google's Gemma terms, then select **I have reviewed and accept these model
+Open **Settings** and find **EmbeddingGemma 2**. Review its Apache-2.0 license
+(Google's Gemma 4 license), then select **I have reviewed and accept these model
 terms** and click **Download and prepare Vibe**. Lux downloads the pinned model
 files to your computer (about 1.53 GB) and verifies them. This is separate from
 YuE2 and does not change your music model. If Hugging Face asks for access,

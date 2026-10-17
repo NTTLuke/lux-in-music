@@ -1,7 +1,6 @@
 "use strict";
 
 const Vibe = (() => {
-  const LICENSE_REVIEW = "google/embeddinggemma-2@c3f2237ce16fe33d1bb9dab8692c29c79865bdeb:Apache-2.0+Google-Gemma-Terms";
   const $ = (id) => document.getElementById(id);
   let files = [], previewUrls = [], result = null, busy = false, accepted = false, acceptanceTouched = false, analysisError = "";
   let status = null, pollTimer = null, wasVisible = false, lastSettingsJson = "";
@@ -172,22 +171,24 @@ const Vibe = (() => {
     const job = status?.job, running = job && ["queued", "running"].includes(job.status);
     const percent = job?.total_bytes ? Math.min(job.stage === "downloading" ? 99 : 100, Math.round(100 * job.completed_bytes / job.total_bytes)) : 0;
     const checked = acceptanceTouched ? accepted : Boolean(status?.license_accepted);
-    $("vibe-settings").innerHTML = `<article class="model-card" id="vibe-model-card"><div class="label-row"><h3>EmbeddingGemma 2</h3><span class="badge">Optional Vibe model</span></div>
+    const licenses = status?.licenses || [], licensed = licenses.length && licenses.every((l) => l.verified && l.id && l.url);
+    $("vibe-settings").innerHTML = `<article class="model-card" id="vibe-model-card"><div class="label-row"><h3>${esc(status?.name || "Vibe model")}</h3><span class="badge">Optional Vibe model</span></div>
       <p>Local image and text embeddings for Lux Vibe. Optional; installed only when you choose.</p>
-      <p class="hint">Source: <a href="${esc(status?.model_url || "https://huggingface.co/google/embeddinggemma-2")}" target="_blank" rel="noopener noreferrer">google/embeddinggemma-2</a> · <a href="https://ai.google.dev/gemma/docs/embeddinggemma/model_card_2" target="_blank" rel="noopener noreferrer">Google model card</a><br>Revision: <code>c3f2237ce16f</code><br>Weights: about 1.53 GB, plus optional runtime dependencies<br>Text + image inference; audio encoder is not loaded. FP32 on Apple Metal when available, CPU fallback.</p>
-      <div class="model-licenses"><h4>License — review before downloading</h4><p><b>Model: <a href="${esc(status?.license_url || "https://www.apache.org/licenses/LICENSE-2.0")}" target="_blank" rel="noopener noreferrer">Apache-2.0</a></b><br>Google Gemma terms also apply; review <a href="${esc(status?.gemma_terms_url || "https://ai.google.dev/gemma/terms")}" target="_blank" rel="noopener noreferrer">Google's Gemma Terms</a> before use.</p>
-      <label class="license-accept"><input type="checkbox" id="vibe-license" ${checked ? "checked" : ""}> I have reviewed and accept these model terms.</label></div>
+      ${status ? `<p class="hint">Source: <a href="${esc(status.model_url)}" target="_blank" rel="noopener noreferrer">${esc(status.model_id)}</a> · <a href="${esc(status.model_card_url)}" target="_blank" rel="noopener noreferrer">Google model card</a><br>Revision: <code>${esc(status.revision.slice(0, 12))}</code><br>Weights: about ${(status.total_bytes / 1e9).toFixed(2)} GB, plus optional runtime dependencies<br>Text + image inference; audio encoder is not loaded. FP32 on Apple Metal when available, CPU fallback.</p>` : ""}
+      <div class="model-licenses"><h4>Licenses — review before downloading</h4>${licenses.map((l) => `<p><b>${esc(l.component)}: <a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.id)}</a></b><br>${esc(l.summary)}</p>`).join("")}
+      ${licensed ? "" : '<p class="error">License information is unavailable. Downloads are disabled until it loads.</p>'}
+      <label class="license-accept"><input type="checkbox" id="vibe-license" ${checked ? "checked" : ""} ${licensed ? "" : "disabled"}> I have reviewed and accept these model terms.</label></div>
       <p class="hint">${status?.installed && status.runtime_compatible === false ? "Model files are verified. The local image runtime needs an update. Select Update Vibe runtime to prepare the required software and reuse these model files." : status?.installed ? "Model files verified on this computer. They remain local and are never uploaded." : status?.files_present ? "Model files were found but need repair or verification. Lux will reuse valid local files where possible." : "Not installed. Installing the model does not change your active music generation model."}</p>
       ${job?.restart_required && status.auto_restart ? '<p class="hint" role="status">Vibe software updated. Lux restarts automatically when no songs are generating or queued, then Vibe is ready. The model files are already installed.</p>' : ""}
       ${job?.restart_required && !status.auto_restart ? '<p class="hint" role="status">Vibe software updated. In the Terminal window running Lux, press <kbd>Ctrl+C</kbd> and wait for the server to stop, then run <code>./studio.sh</code> again. Refreshing the browser does not restart the runtime. The model files are already installed.</p>' : ""}
       ${job?.status === "error" ? `<p class="error" role="alert">Setup failed: ${esc(job.error)} You can retry the installation.</p>` : ""}
       ${running ? `<progress max="100" ${job.stage === "downloading" ? `value="${percent}"` : ""} aria-label="Preparing EmbeddingGemma"></progress><p class="hint" role="status" aria-live="polite">${["preparing_runtime", "updating_runtime"].includes(job.stage) ? "Preparing the local inference runtime…" : job.stage === "downloading" ? `Downloading model files… ${percent}%` : "Verifying model files…"}</p>` : ""}
-      <div class="model-actions"><button class="btn primary" id="vibe-install" type="button" ${!checked || running || (status?.installed && status.runtime_compatible !== false) ? "disabled" : ""}>${status?.installed && status.runtime_compatible === false ? "Update Vibe runtime" : status?.installed ? "Installed · Verified" : running ? "Installing…" : status?.files_present ? "Verify / repair Vibe" : "Download and prepare Vibe"}</button></div>
+      <div class="model-actions"><button class="btn primary" id="vibe-install" type="button" ${!checked || !licensed || running || (status?.installed && status.runtime_compatible !== false) ? "disabled" : ""}>${status?.installed && status.runtime_compatible === false ? "Update Vibe runtime" : status?.installed ? "Installed · Verified" : running ? "Installing…" : status?.files_present ? "Verify / repair Vibe" : "Download and prepare Vibe"}</button></div>
       <div id="vibe-install-error" role="alert" class="error"></div></article>`;
     $("vibe-license").onchange = (event) => { accepted = event.target.checked; acceptanceTouched = true; renderSettings(); };
     $("vibe-install").onclick = async () => {
       try {
-        await request("/api/vibe/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ license_review_id: status?.license_review_id || LICENSE_REVIEW, accept_license: checked }) });
+        await request("/api/vibe/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ license_review_id: status.license_review_id, accept_license: checked }) });
         await refreshStatus();
       } catch (error) { $("vibe-install-error").textContent = error.message; }
     };

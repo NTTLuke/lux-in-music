@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import hashlib
 import json
 import sys
 import tempfile
@@ -14,8 +15,8 @@ import numpy as np
 from tests.test_models import ModelFixtures
 from studio.artwork import prepare_vibe_artwork
 
-from studio.vibe import (LICENSE_ID, LICENSE_REVIEW_ID, MODEL_ID, REVISION, LocalEmbeddingRuntime, VibeManager,
-                         bounded_download_progress, load_catalog, normalize, rank_catalog,
+from studio.vibe import (LICENSE_ID, LICENSE_REVIEW_ID, MODEL, MODEL_ID, REVISION, LocalEmbeddingRuntime, VibeManager,
+                         bounded_download_progress, source_mismatches, load_catalog, normalize, rank_catalog,
                          blend_catalog, report_snapshot_progress, validate_image, vibe_runtime_status)
 
 
@@ -206,43 +207,97 @@ class VibeManagerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Review and accept"):
                 manager.start_install(LICENSE_REVIEW_ID, False)
 
-    def test_explicit_install_verifies_model_artifact_manifest(self):
+    @staticmethod
+    def pinned(contents):
+        """Synthetic catalog entries pinned like the real one: SHA-256 for weights, git blob IDs otherwise."""
+        files = []
+        for name, data in contents.items():
+            if name.endswith(".safetensors"):
+                files.append({"path": name, "size": len(data), "sha256": hashlib.sha256(data).hexdigest(), "git_sha1": None})
+            else:
+                blob = hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
+                files.append({"path": name, "size": len(data), "sha256": None, "git_sha1": blob})
+        return files
+
+    def install(self, manager):
+        with patch("studio.vibe.importlib.util.find_spec", return_value=object()), \
+             patch("studio.vibe.metadata.version", return_value="6.1.0"):
+            job = manager.start_install(LICENSE_REVIEW_ID, True)
+            for _ in range(200):
+                if manager.job["status"] in {"done", "error"}:
+                    break
+                threading.Event().wait(0.01)
+        return job
+
+    def test_explicit_install_verifies_files_against_pinned_catalog_hashes(self):
+        contents = {"config.json": b'{"model_type":"gemma3"}', "model.safetensors": b"synthetic test weights"}
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            state_path = root / "state.json"
             def download(destination, progress):
-                config = destination / "config.json"
-                weight = destination / "model.safetensors"
-                config.write_text('{"model_type":"gemma3"}')
-                weight.write_bytes(b"synthetic test weights")
-                progress(weight.stat().st_size, weight.stat().st_size, weight.name)
-                return [config, weight]
-            manager = VibeManager(root / "weights", download)
-            manager.state_path = state_path
-            with patch("studio.vibe.importlib.util.find_spec", return_value=object()), \
-                 patch("studio.vibe.metadata.version", return_value="6.1.0"):
-                job = manager.start_install(LICENSE_REVIEW_ID, True)
-                for _ in range(200):
-                    if manager.job["status"] in {"done", "error"}:
-                        break
-                    threading.Event().wait(0.01)
+                for name, data in contents.items():
+                    (destination / name).write_bytes(data)
+                progress(len(contents["model.safetensors"]), len(contents["model.safetensors"]), "model.safetensors")
+            manager = VibeManager(root / "weights", download, self.pinned(contents))
+            manager.state_path = root / "state.json"
+            job = self.install(manager)
             self.assertEqual(manager.job["status"], "done", manager.job)
             self.assertTrue(manager.status()["installed"])
-            state = json.loads(state_path.read_text())
+            state = json.loads(manager.state_path.read_text())
             self.assertEqual(state["revision"], REVISION)
             self.assertEqual(state["license_review_id"], LICENSE_REVIEW_ID)
-            self.assertIn("sha256", state["manifest"]["model.safetensors"])
+            self.assertEqual(state["manifest"]["model.safetensors"]["hash"], hashlib.sha256(contents["model.safetensors"]).hexdigest())
             self.assertIn(job["id"], manager.job["id"])
-            manager.model_path.joinpath("model.safetensors").write_bytes(b"corrupt weights!!")
-            self.assertFalse(manager._verify_hashes(manager._read_state()))
+            manager.model_path.joinpath("model.safetensors").write_bytes(b"corrupt weights!!!!!!")
+            self.assertFalse(manager._verify_hashes())
+            self.assertFalse(manager.status()["installed"])
+
+    def test_download_that_differs_from_the_pinned_hash_is_rejected_and_removed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            pinned = self.pinned({"config.json": b"{}", "model.safetensors": b"expected weights"})
+            def download(destination, progress):
+                (destination / "config.json").write_bytes(b"{}")
+                (destination / "model.safetensors").write_bytes(b"tampered weights")
+            manager = VibeManager(root / "weights", download, pinned)
+            manager.state_path = root / "state.json"
+            self.install(manager)
+            self.assertEqual(manager.job["status"], "error")
+            self.assertIn("Checksum mismatch: model.safetensors", manager.job["error"])
+            self.assertFalse(manager.model_path.joinpath("model.safetensors").exists())
+            self.assertFalse(manager.state_path.exists())
+            self.assertFalse(manager.status()["installed"])
+
+    def test_source_metadata_must_match_the_pinned_catalog_before_download(self):
+        pinned = self.pinned({"config.json": b"{}", "model.safetensors": b"expected weights"})
+        weights, config = pinned[1], pinned[0]
+        sibling = lambda name, size, blob_id=None, sha256=None: types.SimpleNamespace(
+            rfilename=name, size=size, blob_id=blob_id, lfs={"sha256": sha256} if sha256 else None)
+        matching = [sibling("config.json", config["size"], config["git_sha1"]),
+                    sibling("model.safetensors", weights["size"], "pointer-oid", weights["sha256"]),
+                    sibling("README.md", 10, "readme")]
+        self.assertEqual(source_mismatches(pinned, matching), [])
+        changed = [sibling("config.json", config["size"], "0" * 40),
+                   sibling("model.safetensors", weights["size"], "pointer-oid", "f" * 64)]
+        self.assertEqual(source_mismatches(pinned, changed), ["config.json", "model.safetensors"])
+        self.assertEqual(source_mismatches(pinned, matching[:1]), ["model.safetensors"])
+
+    def test_vibe_model_and_license_review_come_from_the_shared_catalog(self):
+        catalog = json.loads((Path(__file__).parent.parent / "config/model-catalog.json").read_text())
+        entry = next(m for m in catalog["optional_models"] if m["id"] == "embeddinggemma-2")
+        self.assertEqual((MODEL_ID, REVISION), (entry["repo"], entry["revision"]))
+        self.assertNotIn(entry["id"], {m["id"] for m in catalog["models"]})
+        review = {"model": entry["id"], "revision": entry["revision"], "licenses": entry["licenses"]}
+        self.assertEqual(LICENSE_REVIEW_ID, hashlib.sha256(json.dumps(review, sort_keys=True).encode()).hexdigest())
+        status = VibeManager(Path(tempfile.gettempdir()) / "lux-vibe-unused").status()
+        self.assertEqual(status["licenses"], entry["licenses"])
+        self.assertEqual(status["total_bytes"], sum(f["size"] for f in entry["files"]))
 
     def test_runtime_update_keeps_the_running_interpreter_and_packages(self):
         with tempfile.TemporaryDirectory() as temp:
             def download(destination, progress):
-                weight = destination / "model.safetensors"
-                weight.write_bytes(b"synthetic test weights")
-                return [weight]
-            manager = VibeManager(Path(temp) / "weights", download)
+                (destination / "model.safetensors").write_bytes(b"synthetic test weights")
+            manager = VibeManager(Path(temp) / "weights", download,
+                                  self.pinned({"model.safetensors": b"synthetic test weights"}))
             manager.state_path = Path(temp) / "state.json"
             runtimes = iter([{"compatible": False, "installed_version": None, "missing": ["torch"]},
                              {"compatible": True, "installed_version": "6.1.0", "missing": []}])

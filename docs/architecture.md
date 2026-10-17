@@ -36,7 +36,12 @@ Vibe is an optional, independent local embedding feature. It is not a generation
 or separation provider and never changes the active music profile. Its dedicated
 `studio/vibe.py` manager downloads only the pinned EmbeddingGemma model artifacts
 to the ignored local `models/vibe/` directory after an explicit Settings license
-review and action. The upstream repository is not copied into Lux source. Vibe
+review and action. The model, its files and licenses are pinned under
+`optional_models` in `config/model-catalog.json`, separate from music profiles,
+with the same SHA-256/git blob hashes as music models. Before downloading, Lux
+compares the Hugging Face metadata for the pinned revision with those hashes;
+after downloading, it hashes each file and removes any mismatch so a retry fetches
+a clean copy. The upstream repository is not copied into Lux source. Vibe
 runtime packages are prepared at that same explicit action; normal setup and app
 startup install neither those packages nor model weights.
 Base dependency synchronization uses `--inexact` to preserve optional runtime

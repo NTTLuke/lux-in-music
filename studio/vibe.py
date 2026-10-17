@@ -20,12 +20,23 @@ from typing import Callable
 
 import numpy as np
 
-MODEL_ID = "google/embeddinggemma-2"
-REVISION = "c3f2237ce16fe33d1bb9dab8692c29c79865bdeb"
-LICENSE_ID = "Apache-2.0"
-LICENSE_URL = "https://www.apache.org/licenses/LICENSE-2.0"
-GEMMA_TERMS_URL = "https://ai.google.dev/gemma/terms"
-LICENSE_REVIEW_ID = f"{MODEL_ID}@{REVISION}:{LICENSE_ID}+Google-Gemma-Terms"
+from .providers import ROOT
+
+MODEL_CATALOG_PATH = ROOT / "config" / "model-catalog.json"
+
+
+def load_model_entry(path: Path = MODEL_CATALOG_PATH, model_id: str = "embeddinggemma-2") -> dict:
+    """The optional Vibe model is pinned in the shared model catalog, outside music profiles."""
+    models = json.loads(path.read_text())["optional_models"]
+    return next(model for model in models if model["id"] == model_id)
+
+
+MODEL = load_model_entry()
+MODEL_ID = MODEL["repo"]
+REVISION = MODEL["revision"]
+LICENSE_ID = MODEL["licenses"][0]["id"]
+LICENSE_REVIEW_ID = hashlib.sha256(json.dumps(
+    {"model": MODEL["id"], "revision": REVISION, "licenses": MODEL["licenses"]}, sort_keys=True).encode()).hexdigest()
 MODEL_URL = f"https://huggingface.co/{MODEL_ID}/tree/{REVISION}"
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
 # Pillow's own decompression-bomb threshold; the model itself sees well under 1 MP.
@@ -35,6 +46,38 @@ MAX_VIBE_IMAGES = 5
 MIN_SENTENCE_TRANSFORMERS = "6.1.0"
 log = logging.getLogger("lux_in_music")
 CATALOG_PATH = Path(__file__).parent / "data" / "vibe-style-catalog.json"
+
+
+class VerificationError(RuntimeError):
+    pass
+
+
+def expected_hash(file: dict) -> str:
+    return file.get("sha256") or file["git_sha1"]
+
+
+def file_digest(path: Path, file: dict) -> str:
+    """SHA-256 for LFS files, the git blob ID for small files, as in the music catalog."""
+    digest = (hashlib.sha256() if file.get("sha256")
+              else hashlib.sha1(b"blob " + str(file["size"]).encode() + b"\0"))
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(8 * 1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def source_mismatches(files: list[dict], siblings) -> list[str]:
+    """Compare Hugging Face metadata for the pinned revision with the catalog before downloading."""
+    remote = {sibling.rfilename: sibling for sibling in siblings}
+    mismatched = []
+    for file in files:
+        sibling = remote.get(file["path"])
+        lfs = getattr(sibling, "lfs", None) or {}
+        if (sibling is None or sibling.size != file["size"]
+                or (file.get("sha256") and lfs.get("sha256") != file["sha256"])
+                or (not file.get("sha256") and sibling.blob_id != file["git_sha1"])):
+            mismatched.append(file["path"])
+    return mismatched
 
 
 def normalize(vector: np.ndarray) -> np.ndarray:
@@ -272,10 +315,12 @@ class LocalEmbeddingRuntime:
 
 
 class VibeManager:
-    def __init__(self, root: Path | None = None, downloader: Callable | None = None):
-        self.root = root or Path(os.environ.get("LUX_VIBE_DIR", Path.cwd() / "models" / "vibe"))
+    def __init__(self, root: Path | None = None, downloader: Callable | None = None,
+                 files: list[dict] | None = None):
+        self.root = root or Path(os.environ.get("LUX_VIBE_DIR", Path.cwd() / "models" / MODEL["install_dir"]))
         self.model_path = self.root / REVISION
         self.state_path = Path.cwd() / ".lux" / "vibe" / "state.json"
+        self.files = MODEL["files"] if files is None else files
         self.downloader = downloader or self._download_snapshot
         self.lock = threading.RLock()
         self.job = None
@@ -292,47 +337,48 @@ class VibeManager:
         with self.lock:
             state = self._read_state()
             runtime = vibe_runtime_status()
-            return {"model_id": MODEL_ID, "revision": REVISION, "license": LICENSE_ID,
-                "license_url": LICENSE_URL, "gemma_terms_url": GEMMA_TERMS_URL,
+            return {"model_id": MODEL_ID, "name": MODEL["name"], "revision": REVISION,
+                "license": LICENSE_ID, "licenses": MODEL["licenses"],
                 "license_review_id": LICENSE_REVIEW_ID, "model_url": MODEL_URL,
+                "model_card_url": MODEL["model_card_url"],
+                "total_bytes": sum(file["size"] for file in self.files),
                 "license_accepted": (state.get("license") == LICENSE_ID
                     and state.get("license_review_id") == LICENSE_REVIEW_ID),
                 "installed": self._verified(state),
                 "runtime_compatible": runtime["compatible"],
                 "runtime_version": runtime["installed_version"],
                 "runtime_missing": runtime["missing"],
-                "files_present": any(self.model_path.rglob("*.safetensors")),
+                "files_present": any((self.model_path / file["path"]).is_file() for file in self.files),
                 "job": dict(self.job) if self.job else None}
 
     def _verified(self, state=None):
+        """Cheap check: every pinned file was hashed at install and is unchanged since."""
         state = state or self._read_state()
-        manifest = state.get("manifest")
+        manifest = state.get("manifest") or {}
         if (not state.get("ready") or state.get("revision") != REVISION
-                or state.get("license_review_id") != LICENSE_REVIEW_ID or not manifest):
+                or state.get("license_review_id") != LICENSE_REVIEW_ID):
             return False
-        for name, values in manifest.items():
-            path = self.model_path / name
-            if (not path.is_file() or path.stat().st_size != values.get("size")
-                    or path.stat().st_mtime_ns != values.get("mtime_ns")):
+        for file in self.files:
+            path, saved = self.model_path / file["path"], manifest.get(file["path"], {})
+            if (not path.is_file() or path.stat().st_size != file["size"]
+                    or path.stat().st_mtime_ns != saved.get("mtime_ns")
+                    or saved.get("hash") != expected_hash(file)):
                 return False
-        return bool(manifest)
+        return bool(self.files)
 
-    def _verify_hashes(self, state):
-        manifest = state.get("manifest", {})
-        files = [(name, self.model_path / name) for name in manifest]
-        signature = tuple(sorted((name, path.stat().st_size, path.stat().st_mtime_ns)
-                                 for name, path in files if path.is_file()))
-        if len(signature) != len(manifest):
+    def _signature(self):
+        return tuple((file["path"], path.stat().st_size, path.stat().st_mtime_ns)
+                     for file in self.files if (path := self.model_path / file["path"]).is_file())
+
+    def _verify_hashes(self, state=None):
+        """Full check against the pinned catalog hashes, cached per process by file fingerprint."""
+        signature = self._signature()
+        if len(signature) != len(self.files):
             return False
         if signature == self._hash_verified_signature:
             return True
-        for name, path in files:
-            digest = hashlib.sha256()
-            with path.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    digest.update(chunk)
-            if digest.hexdigest() != manifest[name].get("sha256"):
-                return False
+        if any(file_digest(self.model_path / file["path"], file) != expected_hash(file) for file in self.files):
+            return False
         self._hash_verified_signature = signature
         return True
 
@@ -378,46 +424,39 @@ class VibeManager:
                                         "Update the Vibe runtime in Settings, then restart Lux.")
             job.update(stage="downloading")
             self.model_path.mkdir(parents=True, exist_ok=True)
-            state = self._read_state()
-            reuse_verified_files = self._verified(state) and self._verify_hashes(state)
-            if reuse_verified_files:
-                manifest = state["manifest"]
-                total = sum(item["size"] for item in manifest.values())
+            total = sum(file["size"] for file in self.files)
+            if self._verified(self._read_state()) and self._verify_hashes():
                 job.update(completed_bytes=total, total_bytes=total,
                            file="Verified local model files")
             else:
-                manifest = self.downloader(self.model_path, lambda done, total, file:
+                self.downloader(self.model_path, lambda done, total, file:
                     job.update(completed_bytes=done, total_bytes=total, file=file))
-            required = [p for p in self.model_path.rglob("*") if p.is_file()
-                        and ".cache" not in p.parts and p.name != ".gitattributes"]
-            if not required or not any(p.suffix in {".safetensors", ".bin"} for p in required):
-                raise RuntimeError("The model download is incomplete: model weight files are missing")
-            job.update(stage="verifying")
-            verified = {}
-            if reuse_verified_files:
-                verified = manifest
-            else:
-                for path in required:
-                    rel = str(path.relative_to(self.model_path))
-                    digest = hashlib.sha256()
-                    with path.open("rb") as handle:
-                        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                            digest.update(chunk)
-                    stat = path.stat()
-                    verified[rel] = {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns,
-                                     "sha256": digest.hexdigest()}
+                job.update(stage="verifying")
+                manifest = {}
+                for file in self.files:
+                    path = self.model_path / file["path"]
+                    if not path.is_file() or path.stat().st_size != file["size"]:
+                        raise VerificationError(f"The model download is incomplete: {file['path']}. Retry the download.")
+                    job.update(file=file["path"])
+                    if file_digest(path, file) != expected_hash(file):
+                        # Remove the bad copy so a retry downloads it again instead of trusting local metadata.
+                        path.unlink(missing_ok=True)
+                        raise VerificationError(f"Checksum mismatch: {file['path']}. Retry to download a verified copy.")
+                    manifest[file["path"]] = {"size": file["size"], "mtime_ns": path.stat().st_mtime_ns,
+                                              "hash": expected_hash(file)}
                 self.state_path.parent.mkdir(parents=True, exist_ok=True)
                 self.state_path.write_text(json.dumps({"ready": True, "revision": REVISION,
                     "license": LICENSE_ID, "license_review_id": LICENSE_REVIEW_ID,
-                    "manifest": verified}, indent=2))
+                    "manifest": manifest}, indent=2))
+                self._hash_verified_signature = self._signature()
             job.update(status="done", stage="restart_required" if runtime_updated else "done",
-                       restart_required=runtime_updated,
-                       completed_bytes=sum(x["size"] for x in verified.values()),
-                       total_bytes=sum(x["size"] for x in verified.values()))
+                       restart_required=runtime_updated, completed_bytes=total, total_bytes=total)
         except Exception as error:
             log.exception("Vibe install failed at stage %s", job.get("stage"))
             message = str(error)
-            if job.get("stage") in {"preparing_runtime", "updating_runtime"}:
+            if isinstance(error, VerificationError):
+                pass
+            elif job.get("stage") in {"preparing_runtime", "updating_runtime"}:
                 message = "Could not prepare the local Vibe runtime. Check network access and disk space, then retry."
             elif job.get("stage") == "checking_runtime":
                 message = str(error)
@@ -428,16 +467,17 @@ class VibeManager:
                 message = "Model files could not be downloaded or verified. Check network access and Hugging Face model access, then retry."
             job.update(status="error", stage="error", error=message)
 
-    @staticmethod
-    def _download_snapshot(destination: Path, progress: Callable):
+    def _download_snapshot(self, destination: Path, progress: Callable):
         from huggingface_hub import HfApi, snapshot_download
-        # Snapshot contains the model artifacts only. No repository code is copied into Lux.
+        # Snapshot contains the pinned model artifacts only. No repository code is copied into Lux.
         from tqdm.auto import tqdm
         progress_lock = threading.Lock()
         model_info = HfApi().model_info(MODEL_ID, revision=REVISION, files_metadata=True)
-        expected_total = sum(item.size or 0 for item in model_info.siblings
-                             if item.rfilename and not item.rfilename.endswith(".md")
-                             and item.rfilename != ".gitattributes")
+        mismatched = source_mismatches(self.files, model_info.siblings or [])
+        if mismatched:
+            raise VerificationError("The files published for this model revision do not match the pinned "
+                                    f"catalog: {', '.join(mismatched)}. Nothing was downloaded.")
+        expected_total = sum(file["size"] for file in self.files)
         class ProgressBar(tqdm):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
@@ -455,12 +495,8 @@ class VibeManager:
             def close(self):
                 super().close()
         snapshot_download(repo_id=MODEL_ID, revision=REVISION, local_dir=str(destination),
-                          tqdm_class=ProgressBar, ignore_patterns=["*.md", ".gitattributes"])
-        files = [p for p in destination.rglob("*") if p.is_file() and ".cache" not in p.parts
-                 and p.name != ".gitattributes"]
-        total = sum(p.stat().st_size for p in files)
-        progress(total, total, "Verifying model files")
-        return files
+                          tqdm_class=ProgressBar, allow_patterns=[file["path"] for file in self.files])
+        progress(expected_total, expected_total, "Verifying model files")
 
     def analyze(self, image):
         return self.analyze_many([image])
