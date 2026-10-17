@@ -19,10 +19,14 @@ class NativeProbeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             manager = ModelManager(Path(root) / "state", Path(root) / "models")
             provider = AudioCppProvider(Path(root) / "runtime")
-            for model_id, rate in {"htdemucs": 44100, "htdemucs-6stems": 44100,
-                                   "bs-roformer": 44100, "sam-audio": 48000}.items():
+            profiles = [(manager.profile(model_id), 44100) for model_id in
+                        ("htdemucs", "htdemucs-6stems", "bs-roformer")]
+            # Retired model snapshots still use the provider's original format.
+            profiles.append(({"id": "legacy-sam", "task": "s2s", "family": "sam_audio",
+                              "input_audio": {"sample_rate": 48000, "channels": 2}}, 48000))
+            for profile, rate in profiles:
+                model_id = profile["id"]
                 with self.subTest(model=model_id):
-                    profile = manager.profile(model_id)
                     def run(selected, request, cancel):
                         self.assertEqual(selected["id"], profile["id"])
                         with wave.open(io.BytesIO(base64.b64decode(request["audio_base64"]))) as audio:
@@ -30,7 +34,7 @@ class NativeProbeTests(unittest.TestCase):
                             self.assertEqual(audio.getnchannels(), 2)
                             self.assertEqual(audio.getsampwidth(), 2)
                             self.assertEqual(audio.getnframes(), rate)
-                        if model_id == "sam-audio":
+                        if profile["family"] == "sam_audio":
                             self.assertEqual(request["text"], "voice")
                             self.assertEqual(set(request), {"audio_base64", "text", "seed"})
                         else:

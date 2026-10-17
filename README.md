@@ -6,6 +6,17 @@ with Apple Silicon, using YuE2 through audio.cpp.
 
 You do not need to write code to install it. Follow the steps below in order.
 
+## Take a look inside
+
+Create music, find a direction with Vibe, remix stems and choose local models.
+These example screens use synthetic songs and illustrations. Click an image to enlarge it.
+
+| Create & Library | Vibe · images to musical style |
+| --- | --- |
+| [![Create and Library](docs/images/create.png)](docs/images/create.png) | [![Vibe image analysis and editable style](docs/images/vibe.png)](docs/images/vibe.png) |
+| **Studio Mode · stem mixer** | **Settings · local models** |
+| [![Studio Mode multitrack mixer](docs/images/studio.png)](docs/images/studio.png) | [![Settings and optional embedding model](docs/images/settings.png)](docs/images/settings.png) |
+
 ## Hear the Complete Demo
 
 **Lux In Tenebris — Complete Demo** · Dance / Melodic Techno · **3:58**
@@ -120,6 +131,41 @@ vocals and instruments; you can leave them uninstalled for now.
 
 Read [the model license notes](docs/model-licenses.md) before choosing a model
 for commercial use. Licenses are shown before each download.
+
+### Optional: suggest a style from an image
+
+Open **Settings** and find **EmbeddingGemma 2**. Review its Apache-2.0 license
+(Google's Gemma 4 license), then select **I have reviewed and accept these model
+terms** and click **Download and prepare Vibe**. Lux downloads the pinned model
+files to your computer (about 1.53 GB) and verifies them. This is separate from
+YuE2 and does not change your music model. If Hugging Face asks for access,
+accept its model terms on the linked model page and sign in from Terminal with
+`hf auth login` before retrying.
+
+Choose **Vibe** in the sidebar and add **1–5 JPG, PNG or WebP images**, up to
+20 MB each. Remove or reorder them with the thumbnail controls, then click
+**Analyze Images**. Lux compares them locally against **120 visual and musical
+directions**, blending a shared atmosphere with complementary instrumental
+textures. The catalog spans electronic, rock, metal, jazz, hip-hop, acoustic,
+orchestral and regional musical traditions.
+
+Edit the suggested style, then choose **Use in Create**. For compatible music
+models, Vibe also suggests **Advanced settings** based on the variety between
+your images. Review the values or uncheck the option to keep your own settings.
+These creative presets use 8 rendering steps, which you can change in Advanced. Your lyrics,
+title, seed and planning choices stay in the form. Image analysis works offline
+after installation and does not start music generation.
+
+The images become a **composite cover** and a local listening gallery for each
+new song. You can remove them from Create before generating. During playback,
+the gallery changes image every eight seconds with a slow dissolve. Use the
+arrows or **Pause slideshow** to linger on an image. **Close image** or **Escape**
+closes the view while the music continues; click the player cover to reopen it.
+**Effects On / Off** controls a liquid glow and mirrored equalizer behind the
+images. They react to the playing audio, with a softer glow during quiet passages.
+Lux remembers your choice. Animation stops in pause and when the tab is hidden.
+Reduced-motion preferences disable the effects and keep the slideshow manual.
+Lux releases the embedding model when you leave Vibe.
 
 ### 5. Create your first song
 
@@ -359,10 +405,9 @@ then opens a multitrack mixer.
 | Vocals & Instrumental | BS-RoFormer ep368 (`bs_roformer`) | vocals, instrumental | Publisher declares Apache-2.0; original checkpoint source undocumented | 33 s |
 | 4 stems | HTDemucs (`htdemucs`) | vocals, drums, bass, other | MIT | 3.5 s |
 | 6 stems | HTDemucs 6s (`htdemucs_6stems`) | + guitar, piano | MIT | 3.6 s |
-| Anything | SAM Audio base (`sam_audio`) | your text prompt + everything else (mono 48 kHz) | Meta SAM License | 19 s |
 
 Mixer: mute/solo/volume per stem, live meters, click-to-seek lanes, presets (Karaoke, A cappella,
-No drums, Rhythm section, Only/Remove prompt), per-stem WAV download and **Export mix** (rendered in
+No drums, Rhythm section), per-stem WAV download and **Export mix** (rendered in
 the browser). Stems are stored in `outputs/stems/<song>/<mode>/` with a `stems.json`.
 
 ### Studio Mode: regenerate a piece of one stem

@@ -8,6 +8,14 @@ from studio.providers import ROOT, get_provider
 
 
 class CatalogTests(unittest.TestCase):
+    def test_retired_sam_model_cannot_be_selected_or_downloaded(self):
+        with tempfile.TemporaryDirectory() as root:
+            manager = ModelManager(Path(root) / "state", Path(root) / "models")
+            self.assertNotIn("sam-audio", manager.catalog)
+            self.assertFalse(any(m.get("mode_id") == "anything" for m in manager.catalog.values()))
+            with self.assertRaisesRegex(ValueError, "Unknown model"):
+                manager.profile("sam-audio")
+
     def test_yue2_keeps_base_weight_terms_and_pins_the_creator_permission(self):
         model = next(m for m in json.loads((ROOT / "config/model-catalog.json").read_text())["models"] if m["id"] == "yue2-3b")
         self.assertEqual([l["id"] for l in model["licenses"][:2]], ["CC-BY-NC-4.0", "CC-BY-NC-4.0"])
@@ -26,6 +34,20 @@ class CatalogTests(unittest.TestCase):
                 self.assertTrue(license["url"].startswith("https://"))
                 self.assertEqual(license["release_revision"], model["revision"])
             for file in [*model["precisions"].values(), *model["vaes"].values(), *model["required"]]:
+                self.assertIn(f"/resolve/{model['revision']}/", file["url"])
+                self.assertGreater(file["size"], 0)
+                self.assertRegex(file.get("sha256") or file["git_sha1"], r"^[0-9a-f]{40}([0-9a-f]{24})?$")
+
+    def test_optional_models_pin_every_file_hash_and_license(self):
+        for model in json.loads((ROOT / "config/model-catalog.json").read_text())["optional_models"]:
+            self.assertRegex(model["revision"], r"^[0-9a-f]{40}$")
+            self.assertTrue(model["licenses"])
+            for license in model["licenses"]:
+                self.assertTrue(license["verified"])
+                self.assertTrue(license["url"].startswith("https://"))
+                self.assertEqual(license["release_revision"], model["revision"])
+            self.assertTrue(any(file["path"].endswith(".safetensors") and file["sha256"] for file in model["files"]))
+            for file in model["files"]:
                 self.assertIn(f"/resolve/{model['revision']}/", file["url"])
                 self.assertGreater(file["size"], 0)
                 self.assertRegex(file.get("sha256") or file["git_sha1"], r"^[0-9a-f]{40}([0-9a-f]{24})?$")

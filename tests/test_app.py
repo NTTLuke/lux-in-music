@@ -116,20 +116,58 @@ class LaunchHostTests(unittest.TestCase):
         import contextlib, io
         from studio import launch
         out = io.StringIO()
-        with patch.object(sys, "argv", ["launch", "--no-open", *argv]), patch("uvicorn.run") as run, \
+        with patch.object(sys, "argv", ["launch", "--no-open", *argv]), patch("uvicorn.Config") as config, \
+                patch("uvicorn.Server"), patch("studio.app.enable_auto_restart"), \
                 contextlib.redirect_stdout(out):
             launch.main()
-        return run.call_args.kwargs["host"], out.getvalue()
+        return config.call_args.kwargs["host"], out.getvalue()
+
+    def test_requested_restart_stops_the_server_and_reexecs_without_opening_a_tab(self):
+        import contextlib, io
+        from studio import launch
+        class Server:
+            def __init__(self, config): self.should_exit = False
+            def run(self): restart_hooks[0]()
+        restart_hooks = []
+        with patch.object(sys, "argv", ["launch", "--port", "18001"]), patch("uvicorn.Config"), \
+                patch("uvicorn.Server", Server), patch("studio.launch.threading.Thread"), \
+                patch("studio.app.enable_auto_restart", restart_hooks.append), \
+                patch("studio.launch.os.execv") as execv, contextlib.redirect_stdout(io.StringIO()):
+            launch.main()
+        execv.assert_called_once_with(sys.executable, [sys.executable, "-m", "studio.launch",
+                                                       "--port", "18001", "--no-open"])
 
     def test_local_by_default_and_warns_when_listening_elsewhere(self):
         host, out = self.launch()
         self.assertEqual(host, "127.0.0.1")
         self.assertIn("http://127.0.0.1:8000", out)
         self.assertNotIn("WARNING", out)
-        for given, shown in [("0.0.0.0", "http://127.0.0.1:8000"), ("192.168.1.20", "http://192.168.1.20:8000"),
+        host, out = self.launch("--host", "0.0.0.0")
+        self.assertEqual(host, "0.0.0.0")
+        self.assertIn("every network interface", out)
+        self.assertIn("http://127.0.0.1:8000", out)
+        self.assertIn("no login", out)
+        for given, shown in [("192.168.1.20", "http://192.168.1.20:8000"),
                              ("fd7a::1", "http://[fd7a::1]:8000")]:
             with self.subTest(host=given):
                 host, out = self.launch("--host", given)
                 self.assertEqual(host, given)
                 self.assertIn(shown, out)
                 self.assertIn("no login", out)
+
+    def test_ready_line_mentions_other_devices_only_when_shared(self):
+        import contextlib, io, json, threading
+        from studio import launch
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self): return json.dumps({"setup_required": False}).encode()
+        for shared in (True, False):
+            with self.subTest(shared=shared):
+                out = io.StringIO()
+                with patch("studio.launch.urllib.request.urlopen", return_value=Response()), \
+                        patch("studio.launch.webbrowser.open") as opened, \
+                        contextlib.redirect_stdout(out):
+                    launch.open_when_ready("http://127.0.0.1:8000", threading.Event(), shared)
+                opened.assert_called_once_with("http://127.0.0.1:8000/")
+                self.assertEqual("reachable from other devices" in out.getvalue(), shared)

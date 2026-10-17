@@ -20,7 +20,8 @@ const MODE_INFO = {
   vocals: { title: "Vocals & Instrumental", desc: "Clean a cappella and karaoke backing track.", model: "BS-RoFormer · Apache-2.0", stems: ["vocals", "instrumental"] },
   "4stems": { title: "4 Stems", desc: "The classic split for remixing.", model: "HTDemucs · MIT", stems: ["vocals", "drums", "bass", "other"] },
   "6stems": { title: "6 Stems", desc: "Adds dedicated guitar and piano tracks.", model: "HTDemucs 6s · MIT", stems: ["vocals", "drums", "bass", "guitar", "piano", "other"] },
-  anything: { title: "Anything", desc: "Describe a sound and pull it out.", model: "SAM Audio · Meta SAM License", stems: ["target", "residual"] },
+  // Retain labels for previously saved stem sets; no longer offered for new work.
+  anything: { title: "Anything", desc: "Describe a sound and pull it out.", model: "SAM Audio · Meta SAM License", stems: ["target", "residual"], retired: true },
 };
 const PROMPT_IDEAS = ["lead vocal", "backing vocals", "acoustic guitar", "kick drum", "snare", "hi-hat", "piano", "synth lead", "bass guitar", "hand claps", "strings", "reverb tail"];
 
@@ -46,11 +47,16 @@ const Lux = (() => {
     document.body.classList.toggle("lux-mode", on);
     document.getElementById("nav-create").classList.toggle("active", !on);
     document.getElementById("nav-lux").classList.toggle("active", on);
-    if (location.hash === "#/settings") document.getElementById("nav-create").classList.remove("active");
+    if (location.hash === "#/settings" || location.hash === "#/vibe") document.getElementById("nav-create").classList.remove("active");
+    if (location.hash === "#/vibe") document.getElementById("nav-lux").classList.remove("active");
     if (!on) pause();
   }
   async function open(name) {
-    if (location.hash !== `#/lux/${name}`) { history.pushState(null, "", `#/lux/${encodeURIComponent(name)}`); }
+    if (location.hash !== `#/lux/${name}`) {
+      history.pushState(null, "", `#/lux/${encodeURIComponent(name)}`);
+      // pushState does not emit hashchange; retire the other views explicitly.
+      Settings.route(); window.Vibe?.route();
+    }
     await route();
   }
   async function route() {
@@ -93,7 +99,7 @@ const Lux = (() => {
     return `
       <div class="lx-head">
         <button class="icon-btn" data-lx="back" title="All songs"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
-        <img class="lx-cover" src="${cover(s.name, 160)}" alt="">
+        <img class="lx-cover" src="${songCover(s, 160)}" alt="">
         <div class="lx-title"><div class="lx-kicker">Studio Mode</div><h1>${esc(s.title)}</h1>
           <div class="lx-sub">${esc(s.params.style)}</div></div>
         <div class="lx-head-actions">${extra}</div>
@@ -111,7 +117,7 @@ const Lux = (() => {
       </div>
       <div class="lx-grid">${songs.length ? songs.map((s) => `
         <button class="lx-pick" data-lx="open" data-name="${esc(s.name)}">
-          <img src="${cover(s.name, 256)}" alt="">
+          <img src="${songCover(s, 256)}" alt="">
           <div><b>${esc(s.title)}</b><span>${fmt(s.duration_s)} · ${esc(s.params.style.split(",").slice(1, 3).join(","))}</span></div>
         </button>`).join("") : `<div class="empty"><h3>No songs yet</h3>Create one first, then bring it here.</div>`}
       </div>`;
@@ -122,7 +128,7 @@ const Lux = (() => {
     el().innerHTML = header(L.sets.length ? `<button class="btn" data-lx="tomix">Back to mixer</button>` : "") + `
       <div class="lx-ask">
         <h2>What do you want to separate?</h2>
-        <div class="lx-modes">${Object.entries(MODE_INFO).map(([id, m]) => `
+        <div class="lx-modes">${Object.entries(MODE_INFO).filter(([, m]) => !m.retired).map(([id, m]) => `
           <button class="lx-mode ${L.mode === id ? "on" : ""}" data-lx="mode" data-mode="${id}" ${Settings.modeReady(id) ? "" : "disabled"}>
             <div class="lx-stem-dots">${m.stems.map((st) => `<span style="--c:${STEM_COLORS[st]}" title="${st}"><svg viewBox="0 0 24 24">${STEM_ICONS[st]}</svg></span>`).join("")}</div>
             <div class="lx-mode-title">${m.title}${has.has(id) && id !== "anything" ? '<span class="badge">done</span>' : ""}</div>

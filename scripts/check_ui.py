@@ -5,23 +5,84 @@ Requires Playwright and an installed Chrome. No model or browser download occurs
 
 import argparse
 import json
+import io
+import math
 import os
 import re
 import shutil
 import socket
 import subprocess
+import struct
 import tempfile
 import time
 import urllib.request
+import zlib
+import wave
 from urllib.parse import urljoin
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def synthetic_png(color=(40, 80, 120)):
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 32, 24, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress((b"\0" + bytes(color) * 32) * 24)) + chunk(b"IEND", b""))
+
+
+def reactive_wav():
+    """A synthetic bass/mid tone with a silent interval; no song audio."""
+    frames = bytearray()
+    for n in range(20 * 8000):
+        t = n / 8000
+        sample = 0 if 2 <= t < 8 else .22 * math.sin(2 * math.pi * 90 * t) + .08 * math.sin(2 * math.pi * 850 * t)
+        frames.extend(struct.pack("<h", round(sample * 32767)))
+    output = io.BytesIO()
+    with wave.open(output, "wb") as audio:
+        audio.setnchannels(1); audio.setsampwidth(2); audio.setframerate(8000); audio.writeframes(frames)
+    return output.getvalue()
+
+
+def check_reactive_effects(page, expect, artifacts):
+    effects = page.locator("#vibe-effects")
+    toggle = page.locator("#vibe-effects-toggle")
+    expect(toggle).to_have_attribute("aria-pressed", "true")
+    page.evaluate("audio.currentTime = 10")
+    page.wait_for_function("parseFloat($('vibe-effects').style.getPropertyValue('--vibe-energy')) > .15")
+    assert page.evaluate("$('vibe-effects').width <= 960 && $('vibe-effects').height <= 720")
+    page.evaluate("audio.currentTime = 3")
+    page.wait_for_function("parseFloat($('vibe-effects').style.getPropertyValue('--vibe-energy')) < .025", timeout=4500)
+    page.evaluate("audio.currentTime = 10")
+    page.wait_for_function("parseFloat($('vibe-effects').style.getPropertyValue('--vibe-energy')) > .15")
+    page.screenshot(path=str(artifacts / "vibe-effects-desktop.png"))
+    page.locator("#p-play").click()
+    frozen = effects.evaluate("canvas => canvas.toDataURL()")
+    page.wait_for_timeout(250)
+    assert effects.evaluate("canvas => canvas.toDataURL()") == frozen
+    page.locator("#p-play").click()
+    page.evaluate("Object.defineProperty(document, 'hidden', {configurable:true, value:true}); document.dispatchEvent(new Event('visibilitychange'))")
+    frozen = effects.evaluate("canvas => canvas.toDataURL()")
+    page.wait_for_timeout(250)
+    assert effects.evaluate("canvas => canvas.toDataURL()") == frozen
+    page.evaluate("delete document.hidden; document.dispatchEvent(new Event('visibilitychange'))")
+    toggle.click()
+    expect(toggle).to_have_text("Effects Off")
+    expect(effects).to_have_css("opacity", "0")
+    before = page.evaluate("audio.currentTime")
+    page.wait_for_timeout(250)
+    assert page.evaluate("!audio.paused && audio.currentTime") > before
+    assert page.evaluate("localStorage.getItem('lux.vibe.effects')") == "off"
+    toggle.click()
+    expect(toggle).to_have_text("Effects On")
+    assert page.evaluate("window.__luxMediaSourceCount") == 1
+    page.wait_for_function("parseFloat(getComputedStyle($('vibe-effects')).opacity) > .4")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--artifacts", type=Path, default=ROOT / "outputs/checks/ui")
+    parser.add_argument("--readme-screenshots", action="store_true", help="Capture synthetic example screens for the README")
     args = parser.parse_args(); args.artifacts.mkdir(parents=True, exist_ok=True)
     from playwright.sync_api import sync_playwright, expect
     chrome = os.environ.get("LUX_TEST_BROWSER") or shutil.which("google-chrome") or "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
@@ -45,14 +106,25 @@ def main():
                 with sync_playwright() as playwright:
                     browser = playwright.chromium.launch(executable_path=chrome, headless=True)
                     page = browser.new_page(viewport={"width": 1440, "height": 1000})
+                    page.add_init_script("""window.__luxMediaSourceCount = 0;
+                        const original = AudioContext.prototype.createMediaElementSource;
+                        AudioContext.prototype.createMediaElementSource = function(...args) {
+                            window.__luxMediaSourceCount++; return original.apply(this, args);
+                        };""")
                     errors = []; page.on("pageerror", lambda error: errors.append(str(error)))
                     page.route("https://**/*", lambda route: route.abort())  # external fonts are optional
                     page.goto(url); page.wait_for_url("**/#/settings")
+                    default_lyrics = page.locator("#lyrics").input_value()
+                    assert default_lyrics.startswith("[Verse]\n") and "[Outro]\n" in default_lyrics
+                    expect(page.locator("#nav-vibe .new-badge")).to_have_text("NEW")
+                    expect(page.locator("#nav-lux .new-badge")).to_have_count(0)
+                    expect(page.locator("#vibe-model-card")).to_be_visible()
+                    assert abs(page.locator("#vibe-model-card").bounding_box()["width"] - page.locator("#model-test-model").bounding_box()["width"]) < 1
                     expect(page.locator("#vae-test-model")).to_have_value("f16")
                     expect(page.locator("#setup-test-model")).to_be_disabled()
-                    expect(page.locator(".model-licenses").first).to_contain_text("MIT")
-                    expect(page.locator(".model-licenses").first).to_contain_text("monetize outputs")
-                    expect(page.locator(".model-licenses").first).to_contain_text("company use")
+                    expect(page.locator("#model-test-model .model-licenses")).to_contain_text("MIT")
+                    expect(page.locator("#model-test-model .model-licenses")).to_contain_text("monetize outputs")
+                    expect(page.locator("#model-test-model .model-licenses")).to_contain_text("company use")
                     assert page.locator("#model-progress").count() == 0
                     assert page.locator("#precision-test-external").count() == 0
                     assert page.locator("#vae-test-external").count() == 0
@@ -135,6 +207,163 @@ def main():
                     page.set_viewport_size({"width": 1440, "height": 1000})
                     page.locator("#go").click()
                     expect(page.locator(".song")).to_have_count(2, timeout=15000)
+                    # Vibe uses fake embeddings and a real synthetic image; no weights are loaded.
+                    entry = json.loads((ROOT / "studio/data/vibe-style-catalog.json").read_text())["entries"][0]
+                    page.route("**/api/vibe/status", lambda route: route.fulfill(json={"installed": True, "runtime_compatible": True, "job": None}))
+                    page.route("**/api/vibe/analyze", lambda route: route.fulfill(json={"entry_id": entry["id"], "style": "Synthetic piano and soft strings"}))
+                    before_vibe = page.evaluate("({lyrics: $('lyrics').value, title: $('title').value, seed: $('seed').value, cot: state.cot})")
+                    posts_before_vibe = len(generation_posts)
+                    page.locator("#nav-vibe").click()
+                    expect(page.locator("#vibe")).to_be_visible()
+                    expect(page.locator(".workspace")).to_be_hidden()
+                    expect(page.locator(".create")).to_be_hidden()
+                    page.locator("#vibe-file").set_input_files({"name": "synthetic.png", "mimeType": "image/png", "buffer": synthetic_png()})
+                    page.locator("#vibe-analyze").click()
+                    expect(page.locator("#vibe-style")).to_have_value("Synthetic piano and soft strings")
+                    page.locator("#vibe-style").fill("Synthetic edited piano direction")
+                    page.locator("#vibe-use").click()
+                    expect(page.locator("#style")).to_have_value("Synthetic edited piano direction")
+                    assert page.evaluate("({lyrics: $('lyrics').value, title: $('title').value, seed: $('seed').value, cot: state.cot})") == before_vibe
+                    assert len(generation_posts) == posts_before_vibe
+                    expect(page.locator("#create-vibe-reference")).to_be_visible()
+                    page.locator("#title").fill("Synthetic Vibe cover")
+                    page.locator("#go").click()
+                    vibe_row = page.locator(".song[data-name]").filter(has_text="Synthetic Vibe cover")
+                    expect(vibe_row).to_have_count(1, timeout=15000)
+                    expect(vibe_row).to_contain_text("Vibe · Image inspired")
+                    image_src = vibe_row.locator(".cover img").get_attribute("src")
+                    saved_image = page.request.get(urljoin(page.url, image_src))
+                    assert saved_image.ok and saved_image.headers["content-type"] == "image/jpeg"
+                    page.locator("#remove-vibe-cover").click()
+                    assert page.evaluate("Vibe.generationReference()") == {}
+                    page.reload()
+                    expect(vibe_row.locator(".cover img")).to_have_attribute("src", image_src)
+                    page.evaluate("audio.loop = true")
+                    vibe_row.locator(".cover").click()
+                    expect(page.locator("#vibe-listening")).to_have_class(re.compile("open"))
+                    expect(page.locator("#vibe-listening")).to_have_css("opacity", "1")
+                    assert page.locator("#vibe-listening-image").bounding_box()["width"] > 300
+                    expect(page.locator("#p-cover")).to_have_attribute("src", image_src)
+                    expect(page.locator("#p-play")).to_be_visible()
+                    page.screenshot(path=str(args.artifacts / "vibe-listening-desktop.png"))
+                    page.locator("#vibe-listening-close").click()
+                    expect(page.locator("#vibe-listening")).to_be_hidden()
+                    assert page.evaluate("!audio.paused")
+                    page.locator("#p-play").click(); page.locator("#p-play").click()
+                    expect(page.locator("#vibe-listening")).to_be_hidden()
+                    page.locator("#p-artwork").click()
+                    expect(page.locator("#vibe-listening")).to_have_class(re.compile("open"))
+                    page.keyboard.press("Escape")
+                    expect(page.locator("#vibe-listening")).to_be_hidden()
+                    vibe_row.locator("[data-act='info']").click()
+                    expect(page.locator("#drawer")).to_contain_text("Image inspiration · Lux Vibe")
+                    expect(page.locator("#drawer .d-hero img")).to_have_attribute("src", image_src)
+                    page.locator("#drawer [data-act='dimage']").click()
+                    page.set_viewport_size({"width": 390, "height": 844})
+                    expect(page.locator("#vibe-listening")).to_have_class(re.compile("open"))
+                    expect(page.locator("#vibe-listening")).to_have_css("opacity", "1")
+                    expect(page.locator("#vibe-listening-close")).to_be_visible()
+                    expect(page.locator("#p-play")).to_be_in_viewport()
+                    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                    page.screenshot(path=str(args.artifacts / "vibe-listening-mobile.png"))
+                    page.emulate_media(reduced_motion="reduce")
+                    expect(page.locator("#vibe-listening")).to_have_css("transition-duration", "0s")
+                    page.keyboard.press("Escape")
+                    expect(page.locator("#vibe-listening")).to_be_hidden()
+                    page.emulate_media(reduced_motion="no-preference")
+                    page.evaluate("audio.pause(); audio.loop = false; closeDrawer(); setTrack(state.library.find(s => s.name === 'legacy-song')); audio.dispatchEvent(new Event('play'))")
+                    expect(page.locator("#vibe-listening")).to_be_hidden()
+                    page.set_viewport_size({"width": 1440, "height": 1000})
+                    # Five-image blending, Advanced opt-out, composite colors and carousel.
+                    entries = json.loads((ROOT / "studio/data/vibe-style-catalog.json").read_text())["entries"][:5]
+                    advanced = {"label": "Contrasting textures", "explanation": "Synthetic creative preset; edit in Advanced.",
+                                "model_id": "test-model", "options": {"semantic_temperature": 1.1, "semantic_top_p": .97, "semantic_top_k": 140, "num_inference_steps": 8}}
+                    page.unroute("**/api/vibe/analyze")
+                    page.route("**/api/vibe/analyze", lambda route: route.fulfill(json={"entry_id": entries[0]["id"], "entry_ids": [entry["id"] for entry in entries], "image_count": 5,
+                        "style": "Synthetic multi-image direction", "advanced": advanced}))
+                    page.evaluate("$('semantic_temperature').value = .85; $('semantic_temperature').oninput()")
+                    page.locator("#lyrics").fill("   ")
+                    page.locator("#nav-vibe").click()
+                    colors = [(40, 80, 120), (180, 50, 60), (45, 150, 80), (220, 150, 40), (125, 65, 165)]
+                    files = [{"name": f"synthetic-{i}.png", "mimeType": "image/png", "buffer": synthetic_png(color)} for i, color in enumerate(colors)]
+                    page.locator("#vibe-file").set_input_files(files + [files[0]])
+                    expect(page.locator("#vibe-error")).to_contain_text("up to 5 images")
+                    expect(page.locator(".vibe-thumb")).to_have_count(0)
+                    page.locator("#vibe-file").set_input_files(files)
+                    expect(page.locator(".vibe-thumb")).to_have_count(5)
+                    page.locator("[data-vibe-remove='4']").click()
+                    expect(page.locator(".vibe-thumb")).to_have_count(4)
+                    page.locator("#vibe-file").set_input_files(files[4])
+                    page.locator("[data-vibe-move='0'][data-direction='1']").click()
+                    expect(page.locator(".vibe-thumb figcaption").first).to_have_text("synthetic-1.png")
+                    page.locator("[data-vibe-move='1'][data-direction='-1']").click()
+                    page.locator("#vibe-analyze").click()
+                    expect(page.locator("#vibe-use-advanced")).to_be_checked()
+                    page.locator("#vibe-use-advanced").uncheck()
+                    page.locator("#vibe-use").click()
+                    expect(page.locator("#lyrics")).to_have_value(default_lyrics)
+                    expect(page.locator("#lyrics-count")).to_contain_text("5 lines")
+                    expect(page.locator("#semantic_temperature")).to_have_value("0.85")
+                    page.locator("#nav-vibe").click()
+                    page.locator("#vibe-use-advanced").check()
+                    page.locator("#vibe-use").click()
+                    expect(page.locator("#semantic_temperature")).to_have_value("1.1")
+                    expect(page.locator("#num_inference_steps")).to_have_value("8")
+                    expect(page.locator("#create-vibe-reference img")).to_have_count(5)
+                    page.locator("#title").fill("Five-image Vibe song")
+                    with page.expect_request("**/api/generate") as multi_generation:
+                        page.locator("#go").click()
+                    body = multi_generation.value.post_data_json
+                    assert len(body["vibe_images"]) == 5 and body["model_options"]["semantic_temperature"] == 1.1
+                    multi_row = page.locator(".song[data-name]").filter(has_text="Five-image Vibe song")
+                    expect(multi_row).to_have_count(1, timeout=15000)
+                    expect(multi_row).to_contain_text("Vibe · 5 images")
+                    multi_cover = multi_row.locator(".cover img").get_attribute("src")
+                    pixels = page.evaluate("""async src => {
+                        const bitmap = await createImageBitmap(await (await fetch(src)).blob());
+                        const canvas = document.createElement('canvas'); canvas.width = bitmap.width; canvas.height = bitmap.height;
+                        const ctx = canvas.getContext('2d'); ctx.drawImage(bitmap, 0, 0); bitmap.close();
+                        return [[300,600],[750,300],[1050,300],[750,900],[1050,900]].map(([x,y]) => Array.from(ctx.getImageData(x,y,1,1).data).slice(0,3));
+                    }""", multi_cover)
+                    assert all(abs(actual - expected) < 10 for pixel, color in zip(pixels, colors) for actual, expected in zip(pixel, color)), pixels
+                    page.reload()
+                    tone_path = "**/outputs/" + multi_row.get_attribute("data-name") + ".wav"
+                    page.route(tone_path, lambda route: route.fulfill(body=reactive_wav(), content_type="audio/wav"))
+                    page.evaluate("audio.loop = true")
+                    multi_row.locator(".cover").click()
+                    expect(page.locator("#vibe-slide-count")).to_have_text("1 / 5")
+                    expect(page.locator("#vibe-listening")).to_have_class(re.compile("open"))
+                    expect(page.locator("#vibe-slide-count")).to_have_text("2 / 5", timeout=12000)
+                    page.locator("#vibe-slide-pause").click()
+                    expect(page.locator("#vibe-slide-pause")).to_have_text("Resume slideshow")
+                    page.wait_for_timeout(8500)
+                    expect(page.locator("#vibe-slide-count")).to_have_text("2 / 5")
+                    page.locator("#vibe-slide-next").click()
+                    expect(page.locator("#vibe-slide-count")).to_have_text("3 / 5")
+                    check_reactive_effects(page, expect, args.artifacts)
+                    assert page.evaluate("!audio.paused")
+                    page.set_viewport_size({"width": 390, "height": 844})
+                    expect(page.locator("#vibe-slide-next")).to_be_in_viewport()
+                    expect(page.locator("#p-play")).to_be_in_viewport()
+                    expect(page.locator("#vibe-effects-toggle")).to_be_in_viewport()
+                    page.screenshot(path=str(args.artifacts / "vibe-effects-mobile.png"))
+                    page.emulate_media(reduced_motion="reduce")
+                    expect(page.locator("#vibe-effects-toggle")).to_be_disabled()
+                    expect(page.locator("#vibe-effects")).to_have_css("opacity", "0")
+                    expect(page.locator("#vibe-slide-pause")).to_be_disabled()
+                    page.locator("#vibe-slide-prev").click()
+                    expect(page.locator("#vibe-slide-count")).to_have_text("2 / 5")
+                    page.screenshot(path=str(args.artifacts / "vibe-carousel-mobile.png"))
+                    page.keyboard.press("Escape")
+                    expect(page.locator("#vibe-listening")).to_be_hidden()
+                    page.emulate_media(reduced_motion="no-preference")
+                    page.locator("#p-artwork").click()
+                    page.locator("#vibe-effects-toggle").click()
+                    expect(page.locator("#vibe-effects-toggle")).to_have_text("Effects Off")
+                    page.reload()
+                    expect(page.locator("#vibe-effects-toggle")).to_have_text("Effects Off")
+                    page.evaluate("audio.pause(); audio.loop = false; setTrack(state.library.find(s => s.name === 'legacy-song'))")
+                    page.set_viewport_size({"width": 1440, "height": 1000})
                     def stem_set(route):
                         route.fulfill(json=[{"id": "vocals", "mode": "vocals", "mode_label": "Vocals / Instrumental",
                             "prompt": None, "elapsed_s": 0.1, "stems": [{"id": name, "label": name,
@@ -142,7 +371,11 @@ def main():
                                 for name in ("vocals", "instrumental")]}])
                     page.route("**/api/lux/*", stem_set)
                     page.route("**/api/beats/*", lambda route: route.fulfill(json={"bpm": 120, "offset_s": 0, "beat_s": 0.5, "beats_per_bar": 4}))
+                    page.locator("#nav-vibe").click()
                     page.evaluate("Lux.open('legacy-song')")
+                    expect(page.locator("#lux")).to_be_visible()
+                    expect(page.locator("#vibe")).to_be_hidden()
+                    expect(page.locator(".sidebar nav a.active")).to_have_count(1)
                     expect(page.locator(".lx-track")).to_have_count(2)
                     expect(page.locator(".lx-edit-btn")).to_have_count(0)
                     song = page.evaluate("state.library.find((song) => song.name !== 'legacy-song').name")
@@ -151,6 +384,9 @@ def main():
                     expect(page.locator(".lx-edit-btn")).to_have_count(2)
                     page.locator(".lx-edit-btn").first.click()
                     expect(page.locator("#lx-editbar")).to_contain_text("Editing vocals")
+                    page.locator("[data-lx='new']").click()
+                    expect(page.locator("[data-lx='mode'][data-mode='anything']")).to_have_count(0)
+                    expect(page.locator("[data-lx='mode']")).to_have_count(3)
                     # Duration is inferred within the one Generate request.
                     analysis_capable = True
                     def duration_capability(route):
@@ -169,6 +405,16 @@ def main():
                     expect(page.locator("#lyrics-advice")).to_contain_text("closing lyric phrase")
                     expect(page.locator("#cot")).to_be_visible()
                     expect(page.locator("#cot [data-v='off']")).to_have_class("on")
+                    for mode in ("off", "melody", "full"):
+                        button = page.locator(f"#cot [data-v='{mode}']")
+                        expect(button.locator("svg")).to_have_count(1)
+                        button.hover()
+                        expect(button.locator("[role='tooltip']")).to_be_visible()
+                        button.focus()
+                        page.keyboard.press("Tab")
+                        page.keyboard.press("Shift+Tab")
+                        page.mouse.move(1000, 200)
+                        expect(button.locator("[role='tooltip']")).to_be_visible()
                     page.locator("#cot [data-v='melody']").click()
                     with page.expect_request("**/api/generate") as generation_request:
                         page.locator("#go").click()
@@ -217,7 +463,7 @@ def main():
                         page.locator(".song[data-job='held'] [data-act='cancel']").click()
                     assert stop_request.value.method == "POST"
                     page.unroute("**/api/settings/status", duration_capability)
-                    page.locator("#nav-settings").click(); page.set_viewport_size({"width": 390, "height": 844})
+                    page.locator(".mobile-nav a[href='#/settings']").click(); page.set_viewport_size({"width": 390, "height": 844})
                     expect(page.locator(".mobile-nav")).to_be_visible()
                     page.locator(".mobile-nav a[href='#/']").click()
                     expect(page.locator(".workspace")).to_be_visible()
@@ -236,8 +482,30 @@ def main():
                     expect(page.locator("#license-test-model")).to_be_disabled()
                     expect(page.locator("#setup-test-model")).to_be_disabled()
                     assert not errors, errors
+                    # A failed optional AudioContext must leave the native player usable.
+                    fallback = browser.new_context(viewport={"width": 1440, "height": 1000})
+                    fallback_page = fallback.new_page()
+                    fallback_page.route("https://**/*", lambda route: route.abort())
+                    fallback_page.add_init_script("window.AudioContext = class { constructor() { throw new Error('Synthetic unavailable context'); } }")
+                    fallback_page.goto(url + "/#/")
+                    fallback_page.evaluate("audio.loop = true")
+                    fallback_page.locator(".song[data-name]").filter(has_text="Five-image Vibe song").locator(".cover").click()
+                    expect(fallback_page.locator("#vibe-effects-toggle")).to_be_disabled()
+                    expect(fallback_page.locator("#vibe-effects-message")).to_contain_text("Playback continues")
+                    assert fallback_page.evaluate("!audio.paused")
+                    fallback.close()
+                    if args.readme_screenshots:
+                        from readme_screenshots import capture
+                        capture(browser, url, ROOT / "docs/images")
                     browser.close()
-                print(json.dumps({"settings_first": True, "license_gate": True, "independent_precision": True,
+                print(json.dumps({"vibe_effects_unavailable_preserves_playback": True,
+                                  "vibe_effects_follow_live_audio_and_silence": True, "vibe_effects_pause_and_visibility": True,
+                                  "vibe_effects_toggle_persists_without_stopping_audio": True, "vibe_effects_single_media_source": True,
+                                  "vibe_five_image_validation_and_order": True, "vibe_advanced_opt_out_and_transfer": True,
+                                  "vibe_composite_contains_all_images": True, "vibe_carousel_auto_manual_and_pause": True,
+                                  "vibe_style_transfer_preserves_form": True, "vibe_cover_survives_reload": True,
+                                  "vibe_listening_desktop_mobile": True, "vibe_close_reopen_and_resume": True,
+                                  "vibe_reduced_motion": True, "settings_first": True, "license_gate": True, "independent_precision": True,
                                   "fake_download_and_activation": True, "capability_controls": True,
                                   "generation_and_library": True, "five_templates_without_generation": True, "templates_share_techno_lyrics": True, "templates_preserve_title_and_settings": True, "wider_create_and_responsive_layout": True, "implicit_duration_analysis_without_manual_control": True, "lyric_advice_and_truncation_badge": True, "instrumental_switch": True, "shorter_than_target_badge": True, "mobile_navigation": True, "external_without_weights": True, "verification_survives_reload_and_dropdown": True, "separator_disabled_when_active": True, "card_progress_and_errors_only": True, "flac_and_mp3_downloads": True, "delete_song_with_confirmation": True, "generation_stop_button": True, "creator_terms_visible": True, "mixer_editable_and_legacy_songs": True, "unresolved_license_blocked": True, "javascript_errors": errors}))
             finally:

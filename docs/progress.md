@@ -1,5 +1,274 @@
 # Project handoff
 
+## Stronger glow in the Vibe listening effects
+
+Branch: `feat/lux-vibe-v0-1`.
+
+- Follow-up on the author's note: the background behind the artwork was not
+  glowy or engaging enough. The visualization now centers on a hot halo that
+  blooms directly behind the artwork (aura, bloom, core and a white-hot
+  point), with slow concert light shafts that rotate around it.
+- Bass onsets above their recent floor kick the halo with a decaying pulse.
+  Ambient pools slowly trade palette colors; liquid ribbons gained a wide
+  haze pass around their bright core; mirrored spectrum pillars carry a soft
+  aura; warm embers rise and twinkle with the treble.
+- The artwork itself now breathes: an energy- and bass-driven drop-shadow
+  hugs the fitted image, gated on the same enabled state as the canvas. A
+  depth vignette keeps the edges dark so the center reads as light.
+- Same boundaries as before: one media element source, ≤ 960 × 720 raster at
+  30 fps, drawing only while playing and visible, reduced-motion disables it,
+  Effects On / Off persists. Sparkles are pre-rendered sprites; all glow is
+  gradient-based, no shadowBlur.
+- Verification: baseline and full offline checks pass (166 tests). The Chrome
+  desktop/mobile flow passes, including live-audio/silence response, frozen
+  frames on pause/hidden tabs, single media source, persistent toggle and the
+  unavailable-context playback case. Screenshots remain ignored files under
+  `outputs/checks/ui/`.
+- Fixed along the way: the Vibe settings card assumed every status payload
+  carries a revision and threw `undefined.slice` on each poll when it did not
+  (the browser flow's minimal mocked status triggered it). The source and
+  revision paragraph now renders only when the payload includes it.
+- Next step: visual acceptance with a full-length song on the target Mac.
+
+## Vibe runtime update replaced the running environment
+
+- Observed: installing EmbeddingGemma 2 from Settings failed with "the installed
+  version is missing", although `.venv` then contained Sentence Transformers
+  6.1.0. The running server used Python 3.12; the new `.venv` used Python 3.13.
+- Cause: setup syncs with `--python 3.12 --inexact`, but the Settings runtime
+  update ran plain `uv sync --frozen --extra vibe`. uv chose another Python and
+  recreated `.venv` while Lux was running, so its 3.12 site-packages vanished
+  and every Vibe module looked missing.
+- Fix: the runtime update now passes `--inexact` and `--python sys.executable`,
+  so it adds the Vibe extra to the existing environment. A fake-uv regression
+  test checks the command. Full offline checks pass.
+- Next step: rerun `./studio.sh` (it rebuilds the 3.12 environment), then retry
+  the install from Settings with the real runtime.
+- After the runtime update and restart, a `.jpeg` upload was rejected as "Use a
+  JPG, PNG, or WebP image". Phone and camera JPEGs that carry extra pictures
+  are reported by Pillow as MPO, not JPEG. Vibe now accepts MPO and analyzes the
+  primary picture. A real synthetic two-picture MPO is accepted and decoded to
+  its first picture; a fake-Pillow regression test covers the format check.
+- Vibe analysis and install failures now log their traceback (and uv's error
+  output) to the Lux terminal; the browser still gets the short message.
+- Lux restarts itself after a Vibe runtime update. It waits until no generation,
+  separation, stem edit or model download is queued or running, shuts down
+  cleanly, and re-executes the same interpreter with `--no-open`, so the
+  terminal, PID and Ctrl+C stay the same and the open tab reconnects. Hosts
+  that do not use `studio.launch` keep the manual restart message. Verified with
+  unit tests and a real launcher on a spare port (same PID, back in about 1 s).
+  Queued jobs are in memory, which is why restarts wait for an idle queue.
+- Vibe rejected phone photos above 20 MP. That cap was Lux's own; Pillow's
+  decompression-bomb limit is about 89.5 MP and EmbeddingGemma 2 sees at most
+  about 0.65 MP (280 tokens of 48 × 48 px). Vibe now accepts up to Pillow's
+  limit, decodes JPEGs at reduced scale and downscales to 2048 px before
+  analysis. A real synthetic 8064 × 6048 JPEG decodes to 2048 × 1536 in 0.08 s
+  and is analyzed by the installed model. The per-image file limit is now
+  20 MB (was 10 MB) in the server, browser check and README, so full-size phone
+  JPEGs fit; a five-image request may now be up to about 100 MB.
+
+## Clean-environment CI dependency fix
+
+- Both push and pull-request jobs exposed a missing base dependency:
+  `vibe_runtime_status()` uses `packaging.version.Version`, but packaging was
+  only available through the optional embedding runtime on the development Mac.
+- Declare packaging directly in the application dependencies and refresh the
+  lock. Keep all embedding libraries and model downloads optional.
+- Verification: the full offline harness passes all 155 tests in a newly
+  created base-only environment. Confirmed that Torch, Sentence Transformers
+  and Pillow are absent, matching the optional-runtime boundary in Actions.
+
+## Audio-reactive glow in the Vibe listening gallery
+
+Branch: `feat/lux-vibe-v0-1`.
+
+- Added softly moving amber, rose and teal light pools, liquid ribbons and
+  mirrored frequency bars behind the inspiration images. Real playback RMS and
+  bass/mid/treble bands drive the effect with smoothed attack and release.
+- Effects On / Off remembers its state. Drawing stops on pause, image-view
+  closure and hidden tabs; reduced-motion preferences disable it. A single
+  Web Audio media source keeps playback continuous across repeated toggles.
+- The renderer uses at most 960 × 720 pixels at 30 fps. This bounds rendering
+  work; no device-wide performance benchmark is claimed.
+- Chrome checks use a synthetic bass/mid tone and silence to verify amplitude
+  response, frozen frames during pause/hidden tabs, one media source, persistent
+  toggling and mobile controls. A failed-context scenario checks that ordinary
+  playback still works. Existing gallery and application regressions remain.
+- Full offline harness passes 155 tests. Chrome desktop/mobile checks pass,
+  including the unavailable-context playback case, without JavaScript errors.
+  Browser verification and visual review
+  use isolated data; effect screenshots are ignored files under
+  `outputs/checks/ui/vibe-effects-desktop.png` and `vibe-effects-mobile.png`.
+- Next step: visual acceptance with a full-length song on the target Mac.
+
+## Shared starter lyrics for Create and Vibe
+
+- Updated the initial Create lyrics, including a short closing Outro.
+- Use in Create from Vibe fills an empty or whitespace-only lyrics field from
+  that same default and dispatches input/change events. Existing writing remains
+  intact, as do the selected title, seed, planning and instrumental mode.
+- Browser coverage checks the shared default and line counter on empty-field
+  transfer, alongside the existing check that custom lyrics survive transfer.
+- Verification: all 155 offline tests and the Chrome desktop/mobile flow pass.
+
+## Vibe interface polish and lighter generation presets
+
+Branch: `feat/lux-vibe-v0-1`.
+
+- Direct, Melody and Full score have outlined icons and simple English helpers
+  on hover and keyboard focus. A note explains that complete-song fitting can
+  select a full score automatically.
+- EmbeddingGemma shares the responsive model-card grid. NEW appears on Vibe in
+  desktop and mobile navigation, rather than Studio Mode.
+- Removed SAM Audio from the downloadable catalog and new separation choices.
+  Legacy stem-set labels and provider snapshots remain supported. On the local
+  development machine, removed both hard links to its 3,095,951,072-byte weights
+  and its Settings profile/review records, after backing up Settings under the
+  ignored `.lux/backups/` directory. Existing songs and stems were not removed.
+- Every image-guided YuE2 preset suggests exactly 8 rendering steps; image
+  diversity still changes temperature, top-p and top-k. Advanced remains editable.
+  The preset test verifies both normalized values and native request options.
+- Vibe's waiting message explains model loading and the first catalog build.
+  PyTorch's macOS log-redirection warning does not itself stop inference; it is
+  unrelated to the rendering step count. No timing benchmark is inferred from it.
+- README now shows Create/Library, Vibe, Studio Mode and Settings above the audio
+  demo. Captures use the real interface with isolated synthetic showcase data,
+  original geometric illustrations and silent mixer audio. Regenerate with
+  `uv run --no-project --with playwright python scripts/check_ui.py --readme-screenshots`.
+  Screenshots were visually inspected after capture.
+- Screenshot verification found that programmatic Studio navigation from Vibe
+  left the previous view class active. Studio now synchronizes the existing
+  Settings and Vibe routes after pushState; browser checks assert that the mixer
+  is visible and only one sidebar link is selected.
+- Verification: full offline harness passes 155 tests. Chrome desktop/mobile
+  flow passes without JavaScript errors, including card width, hover/keyboard
+  helpers, retired-mode removal, 8-step transfer and cross-page routing.
+- Next step: compare the 8-step music rendering by listening before making any
+  quality or speed claims. This pass verifies preset delivery, not a new audio
+  benchmark or a comparative listening result.
+
+## Five-image Vibe palettes and broader catalog
+
+Branch: `feat/lux-vibe-v0-1`.
+
+- Vibe accepts 1–5 images with add, replace, remove and ordering controls.
+  Every image is limited to 10 MiB and 20 megapixels; multipart uploads reject
+  a sixth image. Decode and inference run sequentially in the worker thread.
+- Expanded the curated catalog from 40 to 120 stable visual/music entries,
+  covering more electronic, acoustic, metal, jazz, hip-hop, orchestral and
+  regional traditions. Catalog content automatically invalidates text caches.
+  Normalized image vectors select individual matches and a shared centroid
+  direction; complementary catalog textures enrich the combined style.
+- YuE2 owns three conservative image-guided sampling presets. The Vibe result
+  shows the values and an opt-out. Use in Create applies only supported controls
+  and checks that the music profile has not changed. Lyrics, seed, title and
+  planning remain the user's inputs. The mapping is a creative heuristic,
+  rather than an upstream claim that images determine ideal sampling values.
+- Each new song gets a mosaic cover and independent gallery JPEGs, stripped of
+  image metadata. The player crossfades images every eight seconds, supports
+  arrows and slideshow pause, and stops auto-advance when playback pauses or the
+  tab is hidden. Reduced-motion preferences keep it manual. Existing single
+  image songs and their covers still work.
+- Verification: full offline harness passes 154 tests, including 35 Vibe tests.
+  Chrome checks cover five-file limits, removal/reordering, Advanced opt-out
+  and transfer, all five colors in the actual JPEG collage, persistence,
+  automatic carousel timing, pause, manual controls and mobile layout.
+- Real offline EmbeddingGemma analysis accepted five synthetic PNGs against
+  all 120 entries and returned a blended style and a Balanced blend preset.
+  A native YuE2 Q8_0/F16 rendering with the Contrasting textures preset produced
+  a finite 7.999-second stereo WAV at 48 kHz (intentional 8-second smoke-test
+  cap, peak 0.4715). The recording and report are local ignored artifacts at
+  `outputs/checks/vibe/image-guided-sampling.wav` and its JSON sidecar.
+- Limitation / next step: the presets need a comparative listening check before
+  claiming a musical-quality improvement. The short native test verifies option
+  acceptance and valid audio, rather than a complete arrangement or preference.
+
+## Vibe song covers and listening view
+
+Branch: `feat/lux-vibe-v0-1`.
+
+- Use in Create now carries the analyzed image alongside the edited style. A
+  preview in Create explains that it becomes the song's local cover and offers
+  Remove. Loading another song, demo or genre template clears the draft image.
+- Generation validates and resizes the image, strips embedded metadata and
+  queues its prepared bytes in private job fields. Each completed variation
+  receives its own JPEG artifact and Vibe catalog reference. Image data stays
+  outside provider inputs and public jobs; cancelling a queued job releases it.
+  Deleting one song removes its cover without changing another variation.
+- Library, song details, Studio Mode and player use the saved image as the
+  cover. Details identify the image inspiration. Playback opens a larger image
+  with a soft fade above the player. Close image or Escape dismisses it while
+  playback continues; pause/resume respects dismissal and the player cover
+  reopens it. Reduced-motion settings remove the transition.
+- Verification: full offline checks pass (147 tests). Chrome browser checks
+  exercise Vibe transfer with existing form fields, real image persistence,
+  cover reuse after reload, playback controls, closing/reopening and desktop
+  and mobile layouts with synthetic inputs and fake inference. Settings and
+  Studio Mode regression checks pass without JavaScript errors.
+- Covers apply to newly created Vibe songs. Earlier image analyses did not
+  retain their source image, so existing songs cannot recover it automatically.
+
+## Current work: LUX VIBE image-to-style suggestions
+
+Branch: `feat/lux-vibe-v0-1`.
+
+- Fixed the repeated Vibe restart/update cycle: startup's exact base `uv sync`
+  removed the optional runtime installed through Settings. Startup now preserves
+  those packages with `--inexact`, without requesting extras on a fresh install.
+  An offline bootstrap regression exercises two launches with a fake optional
+  runtime and catches its removal. The Analyze API also handles `job: null`
+  after a clean restart, instead of failing while reading the old update job.
+- Real local inference uncovered a missing image dependency: the model processor
+  needs torchvision. The optional Sentence Transformers dependency now includes
+  its `image` extra, and runtime readiness checks image dependencies too. The
+  existing model files were reused. A synthetic 64×64 PNG was embedded on CPU,
+  matched to a real catalog entry, and the runtime released successfully.
+  The same synthetic image passed through the real Analyze API with HTTP 200
+  and a nonempty style, followed by successful API resource release.
+  This smoke test also exposed a native crash when CPU cleanup called Metal's
+  cache API; cleanup now touches Metal only for an available MPS device.
+- Added a dedicated Vibe page and sidebar entry between Create and Studio Mode.
+  It supports one JPG/PNG/WebP upload, preview/replace, local analysis state,
+  editable catalog style, and transfer to Create without changing other form
+  values. Desktop and mobile navigation share `#/vibe`.
+- Added a separate optional model manager and Settings card for
+  `google/embeddinggemma-2` at revision `c3f2237ce16fe33d1bb9dab8692c29c79865bdeb`.
+  License acceptance precedes runtime preparation and model download. It stores
+  model artifacts under ignored `models/vibe/`, verifies a SHA-256 manifest, and
+  can reuse or repair local files. Neither `studio.sh` nor application startup
+  downloads the model or Vibe runtime packages.
+- The inference path loads Sentence Transformers lazily from local files, sets
+  offline flags and `local_files_only`, omits the audio encoder, and uses FP32
+  with MPS/CPU handling. It matches image embeddings against a local 40-entry
+  visual-description catalog using normalized cosine similarity. No model
+  repository code, image upload, embedding vector or score is exposed.
+- Verification so far: `python3 scripts/check.py` passes; `.venv/bin/python
+  scripts/check.py --full` passes with 147 tests, including 28 Vibe tests. The
+  catalog/ranking, mocked runtime initialization, offline-only loading, API
+  behavior, license gate, manifest verification, navigation and image checks
+  pass without model weights or a GPU. `uv lock --check --offline` passes.
+- The release wheel builds successfully and contains the Vibe catalog data.
+- Fixed the Vibe download percentage: Hugging Face reports transfer bytes,
+  reconstructed bytes, and file-count progress separately. Lux now reports only
+  reconstructed model bytes and caps the displayed percentage at 100. The new
+  bounded-progress regression test passes.
+- The downloaded model metadata requires Sentence Transformers 6.1.0 or newer;
+  the old Vibe extra installed 5.7.0, which caused local analysis to fail. The
+  Vibe dependency and lock now require 6.1+, Settings can update the runtime
+  while reusing the verified 1.53 GB model files, and analysis explains when a
+  runtime update or app restart is needed. This environment now has Sentence
+  Transformers 6.1.0. The Settings license acknowledgement is restored only
+  when the saved license and review ID match the current model terms. The
+  browser also clears a stale restart message after the new server confirms its
+  status. Runtime version, license persistence and restart-state behavior have
+  regression coverage.
+- Full offline checks pass after these fixes (147 tests). The updated lock
+  passes `uv lock --check --offline`; an offline dry run of startup's dependency
+  sync reports no changes with the Vibe runtime installed.
+- Chrome browser checks pass with fake embedding inference and synthetic
+  images, covering Vibe, Settings, creation, Library and Studio Mode. Apple
+  Silicon MPS acceleration has not been verified; real CPU inference passes.
+
 ## Release publication without changing main
 
 Merged into `main`.
@@ -268,8 +537,9 @@ Branch: `fix/hip-hop-arrangement-length-clean`, issue #18; included in this feat
 
 - `./studio.sh --host <address>` (and `python -m studio.launch --host`) sets the
   address the UI listens on. The default stays `127.0.0.1`. Any other address
-  prints a warning that the studio has no login. With `0.0.0.0` the printed and
-  opened address is `127.0.0.1`. audio.cpp engines still listen on `127.0.0.1`.
+  prints a warning that the studio has no login. With `0.0.0.0` the startup line
+  says it listens on every network interface and points at `127.0.0.1` for the
+  browser, since `0.0.0.0` is not an address a browser can open. audio.cpp engines still listen on `127.0.0.1`.
 - README explains the risk, suggests a trusted LAN or Tailscale address, and an
   SSH tunnel for private remote use.
 - Verification: launch test (default, `0.0.0.0`, IPv4 and IPv6 addresses, warning),

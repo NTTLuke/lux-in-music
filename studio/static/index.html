@@ -13,7 +13,7 @@
 </head>
 <body>
 <div class="glow g1"></div><div class="glow g2"></div><div class="glow g3"></div>
-<nav class="mobile-nav" aria-label="Studio navigation"><a href="#/">Create &amp; Library</a><a href="#/settings">Settings</a><a href="#/lux">Studio Mode</a></nav>
+<nav class="mobile-nav" aria-label="Studio navigation"><a href="#/">Create</a><a href="#/vibe">Vibe <span class="new-badge">NEW</span></a><a href="#/lux">Studio Mode</a><a href="#/settings">Settings</a></nav>
 
 <div class="app">
   <!-- Sidebar -->
@@ -24,7 +24,8 @@
     </div>
     <nav>
       <a class="active" href="#/" id="nav-create"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create <span class="count" id="lib-count">0</span></a>
-      <a href="#/lux" id="nav-lux"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/><path d="M3 17.5l9 5 9-5" opacity=".5"/></svg>Studio Mode <span class="new-badge">NEW</span></a>
+      <a href="#/vibe" id="nav-vibe"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>Vibe <span class="new-badge">NEW</span></a>
+      <a href="#/lux" id="nav-lux"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/><path d="M3 17.5l9 5 9-5" opacity=".5"/></svg>Studio Mode</a>
       <a href="#/settings" id="nav-settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.5 5.5l2 2M16.5 16.5l2 2M5.5 18.5l2-2M16.5 7.5l2-2"/></svg>Settings</a>
     </nav>
     <div class="side-foot">
@@ -38,11 +39,16 @@
     <h1>Models &amp; Settings</h1>
     <p>Choose a music model and review its licenses before downloading. Separation models are optional and installed independently.</p>
     <p id="settings-message" role="status" aria-live="polite">Checking model setup…</p>
-    <div id="model-cards" class="model-cards"></div>
+    <div class="model-cards">
+      <div id="vibe-settings" class="model-card-group"></div>
+      <div id="model-cards" class="model-card-group"></div>
+    </div>
   </section>
+  <section class="vibe" id="vibe" aria-labelledby="vibe-title"></section>
   <section class="create">
     <form id="form" autocomplete="off">
       <div class="demo-row" id="demo-row"></div>
+      <div class="create-vibe-reference" id="create-vibe-reference" hidden></div>
       <details class="genre-templates" id="genre-templates">
         <summary>Genre templates <span class="meta">5 presets</span></summary>
         <p class="hint">Uses the Melodic Techno demo lyrics with your chosen style. Keeps your title and settings.</p>
@@ -58,12 +64,15 @@
           <label class="toggle" id="instrumental-toggle" hidden><input type="checkbox" id="instrumental"><span></span>Instrumental</label></div>
         <div class="tagbar" id="section-tags"></div>
         <textarea id="lyrics" spellcheck="false">[Verse]
-Soft morning light is touching the window.
-I hear the city waking below.
+A new day opens, light across the room
+We find the road beneath a silver moon
 
 [Chorus]
-Stay with the rhythm, let it carry us home.
-Sing with the sunrise, we are never alone.</textarea>
+We rise and carry on
+A steady beat becomes our song
+
+[Outro]
+The last light fades, the night grows calm</textarea>
       </div>
 
       <div class="field">
@@ -82,10 +91,11 @@ Sing with the sunrise, we are never alone.</textarea>
       <div class="field">
         <label>Planning</label>
         <div class="segmented" id="cot">
-          <button type="button" data-v="off" class="on" title="Generate audio directly. Fastest.">Direct</button>
-          <button type="button" data-v="melody" title="Write a melody (ABC score) first, then render.">Melody</button>
-          <button type="button" data-v="full" title="Write a full score first, then render. Exports the score.">Full score</button>
+          <button type="button" data-v="off" class="on" aria-describedby="planning-direct-help"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 10-13h-7l1-7z"/></svg>Direct<span class="planning-help" id="planning-direct-help" role="tooltip">Create music from your style and lyrics without a separate score. Good for exploring ideas freely.</span></button>
+          <button type="button" data-v="melody" aria-describedby="planning-melody-help"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 18V3l9 5"/><circle cx="6" cy="18" r="4"/></svg>Melody<span class="planning-help" id="planning-melody-help" role="tooltip">Plan a melody first, then build the song around it. Keeps a clear melodic line while leaving chords and backing instruments more freedom.</span></button>
+          <button type="button" data-v="full" aria-describedby="planning-full-help"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h11M3 12h9M3 18h7M17 18V6l4 2"/><circle cx="14.5" cy="18" r="2.5"/></svg>Full score<span class="planning-help" id="planning-full-help" role="tooltip">Plan the melody and chords before creating audio. Gives the song a clearer structure and a score you can edit.</span></button>
         </div>
+        <p class="hint planning-note">Lux may use a full score automatically to fit the complete song.</p>
       </div>
 
       <div class="field row2">
@@ -139,9 +149,26 @@ Sing with the sunrise, we are never alone.</textarea>
 <aside class="drawer" id="drawer"></aside>
 
 <!-- Player -->
+<section class="vibe-listening" id="vibe-listening" role="dialog" aria-modal="false" aria-labelledby="vibe-listening-title" hidden>
+  <img class="vibe-listening-backdrop" id="vibe-listening-backdrop" alt="" aria-hidden="true">
+  <img class="vibe-listening-backdrop" id="vibe-listening-backdrop-next" alt="" aria-hidden="true">
+  <canvas class="vibe-effects" id="vibe-effects" aria-hidden="true"></canvas>
+  <div class="vibe-effects-tools"><button class="btn" id="vibe-effects-toggle" type="button" aria-pressed="true">Effects On</button><span id="vibe-effects-message" role="status" hidden></span></div>
+  <button class="btn vibe-listening-close" id="vibe-listening-close" type="button" aria-label="Close image view">Close image <span aria-hidden="true">×</span></button>
+  <figure><div class="vibe-carousel-stage" role="group" aria-roledescription="carousel" aria-label="Song inspiration images">
+      <img class="vibe-listening-image" id="vibe-listening-image" alt="Song’s Vibe inspiration">
+      <img class="vibe-listening-image" id="vibe-listening-image-next" alt="" aria-hidden="true">
+    </div><figcaption><p id="vibe-listening-subtitle">Inspired by your Vibe images</p><h2 id="vibe-listening-title"></h2>
+      <div class="vibe-carousel-controls" id="vibe-carousel-controls" hidden>
+        <button type="button" class="btn" id="vibe-slide-prev" aria-label="Previous inspiration image">←</button>
+        <span id="vibe-slide-count" aria-live="polite"></span>
+        <button type="button" class="btn" id="vibe-slide-next" aria-label="Next inspiration image">→</button>
+        <button type="button" class="btn" id="vibe-slide-pause">Pause slideshow</button>
+      </div></figcaption></figure>
+</section>
 <footer class="player" id="player">
   <div class="p-track">
-    <img class="p-cover" id="p-cover" alt="">
+    <button class="p-artwork" id="p-artwork" type="button" aria-label="Show song image" disabled><img class="p-cover" id="p-cover" alt=""></button>
     <div class="p-info"><div class="p-title" id="p-title">Nothing playing</div><div class="p-style" id="p-style">Create a song to get started</div></div>
   </div>
   <div class="p-center">
@@ -165,6 +192,8 @@ Sing with the sunrise, we are never alone.</textarea>
 <audio id="audio" preload="auto"></audio>
 <script src="/static/settings.js"></script>
 <script src="/static/app.js"></script>
+<script src="/static/vibe-effects.js"></script>
 <script src="/static/lux.js"></script>
+<script src="/static/vibe.js"></script>
 </body>
 </html>

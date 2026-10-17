@@ -100,6 +100,22 @@ class YuE2Adapter:
                     "options": ["num_inference_steps", "guidance_scale", "semantic_temperature",
                                 "semantic_top_p", "semantic_top_k", "semantic_repetition_penalty"]}
 
+    @staticmethod
+    def vibe_options(diversity):
+        """Conservative creative presets, not a measured audio-quality claim."""
+        if not math.isfinite(diversity) or not 0 <= diversity <= 1:
+            raise ValueError("Invalid image diversity")
+        if diversity < 0.08:
+            label, temperature, top_p, top_k = "Cohesive palette", 0.9, 0.9, 80
+        elif diversity < 0.18:
+            label, temperature, top_p, top_k = "Balanced blend", 1.0, 0.95, 100
+        else:
+            label, temperature, top_p, top_k = "Contrasting textures", 1.1, 0.97, 140
+        return {"label": label,
+                "explanation": "A creative preset based on how similar the image atmospheres are. Sampling balances consistency and variation. Rendering uses 8 steps to keep generation lighter. You can edit these values in Advanced.",
+                "options": {"semantic_temperature": temperature, "semantic_top_p": top_p,
+                            "semantic_top_k": top_k, "num_inference_steps": 8}}
+
     def normalize(self, params):
         data = params.model_dump(exclude_none=True)
         options = data.pop("model_options", {})
