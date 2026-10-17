@@ -1,5 +1,35 @@
 # Project handoff
 
+## Stronger glow in the Vibe listening effects
+
+Branch: `feat/lux-vibe-v0-1`.
+
+- Follow-up on the author's note: the background behind the artwork was not
+  glowy or engaging enough. The visualization now centers on a hot halo that
+  blooms directly behind the artwork (aura, bloom, core and a white-hot
+  point), with slow concert light shafts that rotate around it.
+- Bass onsets above their recent floor kick the halo with a decaying pulse.
+  Ambient pools slowly trade palette colors; liquid ribbons gained a wide
+  haze pass around their bright core; mirrored spectrum pillars carry a soft
+  aura; warm embers rise and twinkle with the treble.
+- The artwork itself now breathes: an energy- and bass-driven drop-shadow
+  hugs the fitted image, gated on the same enabled state as the canvas. A
+  depth vignette keeps the edges dark so the center reads as light.
+- Same boundaries as before: one media element source, ≤ 960 × 720 raster at
+  30 fps, drawing only while playing and visible, reduced-motion disables it,
+  Effects On / Off persists. Sparkles are pre-rendered sprites; all glow is
+  gradient-based, no shadowBlur.
+- Verification: baseline and full offline checks pass (166 tests). The Chrome
+  desktop/mobile flow passes, including live-audio/silence response, frozen
+  frames on pause/hidden tabs, single media source, persistent toggle and the
+  unavailable-context playback case. Screenshots remain ignored files under
+  `outputs/checks/ui/`.
+- Fixed along the way: the Vibe settings card assumed every status payload
+  carries a revision and threw `undefined.slice` on each poll when it did not
+  (the browser flow's minimal mocked status triggered it). The source and
+  revision paragraph now renders only when the payload includes it.
+- Next step: visual acceptance with a full-length song on the target Mac.
+
 ## Vibe runtime update replaced the running environment
 
 - Observed: installing EmbeddingGemma 2 from Settings failed with "the installed

@@ -84,7 +84,10 @@ audio destination without filters or gain changes. The context must resume
 before attachment, so initialization failure leaves native playback available.
 It stays alive after attachment because it carries the player's audio; toggling
 effects only stops drawing. RMS amplitude and bass/mid/treble bands control
-smoothed elliptical light pools, liquid ribbons and mirrored spectrum bars.
+smoothed light pools that slowly trade colors, a beat-pulsing halo bloom and
+rotating light shafts behind the artwork, rising treble sparkles, liquid
+ribbons and mirrored spectrum bars; the artwork itself carries an
+energy-driven glow. Bass onsets above their recent floor kick the halo.
 Canvas work is capped at 960 × 720 pixels and 30 frames per second. Closing,
 pausing or hiding the tab cancels the animation loop; reduced-motion preferences
 disable it. Effects On / Off is keyboard accessible and saved in localStorage.
