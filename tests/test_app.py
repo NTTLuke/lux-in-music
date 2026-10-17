@@ -142,7 +142,12 @@ class LaunchHostTests(unittest.TestCase):
         self.assertEqual(host, "127.0.0.1")
         self.assertIn("http://127.0.0.1:8000", out)
         self.assertNotIn("WARNING", out)
-        for given, shown in [("0.0.0.0", "http://127.0.0.1:8000"), ("192.168.1.20", "http://192.168.1.20:8000"),
+        host, out = self.launch("--host", "0.0.0.0")
+        self.assertEqual(host, "0.0.0.0")
+        self.assertIn("every network interface", out)
+        self.assertIn("http://127.0.0.1:8000", out)
+        self.assertIn("no login", out)
+        for given, shown in [("192.168.1.20", "http://192.168.1.20:8000"),
                              ("fd7a::1", "http://[fd7a::1]:8000")]:
             with self.subTest(host=given):
                 host, out = self.launch("--host", given)

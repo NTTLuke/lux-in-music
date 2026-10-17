@@ -507,8 +507,9 @@ Branch: `fix/hip-hop-arrangement-length-clean`, issue #18; included in this feat
 
 - `./studio.sh --host <address>` (and `python -m studio.launch --host`) sets the
   address the UI listens on. The default stays `127.0.0.1`. Any other address
-  prints a warning that the studio has no login. With `0.0.0.0` the printed and
-  opened address is `127.0.0.1`. audio.cpp engines still listen on `127.0.0.1`.
+  prints a warning that the studio has no login. With `0.0.0.0` the startup line
+  says it listens on every network interface and points at `127.0.0.1` for the
+  browser, since `0.0.0.0` is not an address a browser can open. audio.cpp engines still listen on `127.0.0.1`.
 - README explains the risk, suggests a trusted LAN or Tailscale address, and an
   SSH tunnel for private remote use.
 - Verification: launch test (default, `0.0.0.0`, IPv4 and IPv6 addresses, warning),

@@ -33,7 +33,10 @@ def main():
     import uvicorn
     shown = "127.0.0.1" if args.host == "0.0.0.0" else f"[{args.host}]" if ":" in args.host else args.host
     url = f"http://{shown}:{args.port}"
-    print(f"\n[4/4] Starting Lux In Music at {url} (Ctrl+C to quit)…", flush=True)
+    if args.host == "0.0.0.0":
+        print(f"\n[4/4] Starting Lux In Music on every network interface; open {url} (Ctrl+C to quit)…", flush=True)
+    else:
+        print(f"\n[4/4] Starting Lux In Music at {url} (Ctrl+C to quit)…", flush=True)
     if args.host not in ("127.0.0.1", "localhost", "::1"):
         print(f"WARNING: listening on {args.host}. The studio has no login: anyone who can reach this "
               "address can generate, remove jobs, download songs and start model downloads.", flush=True)
