@@ -10,14 +10,15 @@ import webbrowser
 import json
 
 
-def open_when_ready(url, stop):
+def open_when_ready(url, stop, shared=False):
     deadline = time.monotonic() + 30
     while not stop.is_set() and time.monotonic() < deadline:
         try:
             with urllib.request.urlopen(url + "/api/settings/status", timeout=1) as response:
                 status = json.load(response)
             destination = url + ("/#/settings" if status["setup_required"] else "/")
-            print(f"Studio ready: {destination}", flush=True)
+            note = " (reachable from other devices on your network)" if shared else ""
+            print(f"Studio ready: {destination}{note}", flush=True)
             webbrowser.open(destination)
             return
         except (OSError, ValueError):
@@ -42,7 +43,7 @@ def main():
               "address can generate, remove jobs, download songs and start model downloads.", flush=True)
     stop = threading.Event()
     if not args.no_open:
-        threading.Thread(target=open_when_ready, args=(url, stop), daemon=True).start()
+        threading.Thread(target=open_when_ready, args=(url, stop, args.host == "0.0.0.0"), daemon=True).start()
     from . import app as studio_app
     server = uvicorn.Server(uvicorn.Config(studio_app.app, host=args.host, port=args.port, log_level="warning"))
     restart = threading.Event()

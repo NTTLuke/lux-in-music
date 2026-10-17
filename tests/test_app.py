@@ -154,3 +154,20 @@ class LaunchHostTests(unittest.TestCase):
                 self.assertEqual(host, given)
                 self.assertIn(shown, out)
                 self.assertIn("no login", out)
+
+    def test_ready_line_mentions_other_devices_only_when_shared(self):
+        import contextlib, io, json, threading
+        from studio import launch
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self): return json.dumps({"setup_required": False}).encode()
+        for shared in (True, False):
+            with self.subTest(shared=shared):
+                out = io.StringIO()
+                with patch("studio.launch.urllib.request.urlopen", return_value=Response()), \
+                        patch("studio.launch.webbrowser.open") as opened, \
+                        contextlib.redirect_stdout(out):
+                    launch.open_when_ready("http://127.0.0.1:8000", threading.Event(), shared)
+                opened.assert_called_once_with("http://127.0.0.1:8000/")
+                self.assertEqual("reachable from other devices" in out.getvalue(), shared)
