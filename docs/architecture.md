@@ -51,8 +51,10 @@ Vibe or trigger another runtime installation.
 Implementation follows Google's [EmbeddingGemma 2 model card](https://ai.google.dev/gemma/docs/embeddinggemma/model_card_2)
 and [Sentence Transformers multimodal guide](https://ai.google.dev/gemma/docs/embeddinggemma/multimodal-embeddinggemma-with-sentence-transformers).
 
-The runtime loads lazily from local files with Hugging Face offline flags and
-`local_files_only=True`. Sentence Transformers uses text and image encoders,
+The runtime loads lazily from the local model directory with
+`local_files_only=True`. It does not set process-wide Hugging Face offline
+flags: huggingface_hub reads them once at import, so they would block a later
+verify/repair download until Lux restarts. Sentence Transformers uses text and image encoders,
 sets `audio_config=None`, uses FP32 and prefers Apple MPS with CPU fallback. The
 model is released when leaving Vibe so music generation can reclaim memory.
 Vibe accepts one to five images, each limited to 10 MiB and 20 megapixels.

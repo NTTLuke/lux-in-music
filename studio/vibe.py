@@ -220,8 +220,9 @@ class LocalEmbeddingRuntime:
             version = runtime["installed_version"] or "not installed"
             raise RuntimeError(f"Vibe needs Sentence Transformers {MIN_SENTENCE_TRANSFORMERS} or newer; "
                                f"{version} is installed. Open Settings and select Update Vibe runtime.")
-        os.environ["HF_HUB_OFFLINE"] = "1"
-        os.environ["TRANSFORMERS_OFFLINE"] = "1"
+        # A local directory with local_files_only=True needs no network. Do not set
+        # HF_HUB_OFFLINE here: huggingface_hub reads it once at import, so it would
+        # block later Settings downloads (verify/repair) until Lux restarts.
         from sentence_transformers import SentenceTransformer
         import torch
         devices = (["mps", "cpu"] if not force_cpu and torch.backends.mps.is_available() else ["cpu"])

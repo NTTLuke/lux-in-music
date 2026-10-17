@@ -2,6 +2,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import os
 import sys
 import tempfile
 import threading
@@ -330,11 +331,16 @@ class VibeManagerTests(unittest.TestCase):
         torch.float32 = "float32"
         torch.backends = types.SimpleNamespace(mps=types.SimpleNamespace(is_available=lambda: False))
         with tempfile.TemporaryDirectory() as temp, patch.dict("sys.modules", {"sentence_transformers": st, "torch": torch}), \
+             patch.dict("os.environ"), \
              patch("studio.vibe.importlib.util.find_spec", return_value=object()), \
              patch("studio.vibe.metadata.version", return_value="6.1.0"):
+            for name in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"):
+                os.environ.pop(name, None)
             runtime = LocalEmbeddingRuntime(Path(temp) / REVISION)
             selected = runtime.analyze(object())
             combined = runtime.analyze_many([object()] * 5)
+            # Process-wide offline flags would block a later verify/repair download.
+            self.assertEqual([name for name in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE") if name in os.environ], [])
         self.assertEqual(selected["id"], min(row["id"] for row in load_catalog()))
         init_kwargs = calls["init"][1]
         self.assertTrue(init_kwargs["local_files_only"])
