@@ -143,7 +143,7 @@ accept its model terms on the linked model page and sign in from Terminal with
 `hf auth login` before retrying.
 
 Choose **Vibe** in the sidebar and add **1–5 JPG, PNG or WebP images**, up to
-10 MB each. Remove or reorder them with the thumbnail controls, then click
+20 MB each. Remove or reorder them with the thumbnail controls, then click
 **Analyze Images**. Lux compares them locally against **120 visual and musical
 directions**, blending a shared atmosphere with complementary instrumental
 textures. The catalog spans electronic, rock, metal, jazz, hip-hop, acoustic,

@@ -1,5 +1,42 @@
 # Project handoff
 
+## Vibe runtime update replaced the running environment
+
+- Observed: installing EmbeddingGemma 2 from Settings failed with "the installed
+  version is missing", although `.venv` then contained Sentence Transformers
+  6.1.0. The running server used Python 3.12; the new `.venv` used Python 3.13.
+- Cause: setup syncs with `--python 3.12 --inexact`, but the Settings runtime
+  update ran plain `uv sync --frozen --extra vibe`. uv chose another Python and
+  recreated `.venv` while Lux was running, so its 3.12 site-packages vanished
+  and every Vibe module looked missing.
+- Fix: the runtime update now passes `--inexact` and `--python sys.executable`,
+  so it adds the Vibe extra to the existing environment. A fake-uv regression
+  test checks the command. Full offline checks pass.
+- Next step: rerun `./studio.sh` (it rebuilds the 3.12 environment), then retry
+  the install from Settings with the real runtime.
+- After the runtime update and restart, a `.jpeg` upload was rejected as "Use a
+  JPG, PNG, or WebP image". Phone and camera JPEGs that carry extra pictures
+  are reported by Pillow as MPO, not JPEG. Vibe now accepts MPO and analyzes the
+  primary picture. A real synthetic two-picture MPO is accepted and decoded to
+  its first picture; a fake-Pillow regression test covers the format check.
+- Vibe analysis and install failures now log their traceback (and uv's error
+  output) to the Lux terminal; the browser still gets the short message.
+- Lux restarts itself after a Vibe runtime update. It waits until no generation,
+  separation, stem edit or model download is queued or running, shuts down
+  cleanly, and re-executes the same interpreter with `--no-open`, so the
+  terminal, PID and Ctrl+C stay the same and the open tab reconnects. Hosts
+  that do not use `studio.launch` keep the manual restart message. Verified with
+  unit tests and a real launcher on a spare port (same PID, back in about 1 s).
+  Queued jobs are in memory, which is why restarts wait for an idle queue.
+- Vibe rejected phone photos above 20 MP. That cap was Lux's own; Pillow's
+  decompression-bomb limit is about 89.5 MP and EmbeddingGemma 2 sees at most
+  about 0.65 MP (280 tokens of 48 × 48 px). Vibe now accepts up to Pillow's
+  limit, decodes JPEGs at reduced scale and downscales to 2048 px before
+  analysis. A real synthetic 8064 × 6048 JPEG decodes to 2048 × 1536 in 0.08 s
+  and is analyzed by the installed model. The per-image file limit is now
+  20 MB (was 10 MB) in the server, browser check and README, so full-size phone
+  JPEGs fit; a five-image request may now be up to about 100 MB.
+
 ## Clean-environment CI dependency fix
 
 - Both push and pull-request jobs exposed a missing base dependency:

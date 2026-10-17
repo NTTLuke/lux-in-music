@@ -4,6 +4,7 @@
 """
 
 import json
+import logging
 import queue
 import re
 import shutil
@@ -31,6 +32,8 @@ from .providers import get_provider, close_providers
 from .vibe import get_vibe_manager, validate_image, MAX_IMAGE_BYTES, MAX_VIBE_IMAGES
 from .artwork import prepare_vibe_artwork, attach_vibe_artwork
 from starlette.concurrency import run_in_threadpool
+
+log = logging.getLogger("lux_in_music")
 
 STATIC = Path(__file__).parent / "static"
 
@@ -171,9 +174,34 @@ def settings_status():
     return get_manager().status()
 
 
+_restart_server = None  # Set by studio.launch; other hosts keep the manual restart.
+
+
+def _busy() -> bool:
+    active = {"queued", "running"}
+    return (any(job["status"] in active for job in list(jobs.values()))
+            or any(job.get("status") in active for job in get_manager().status()["jobs"]))
+
+
+def _restart_after_runtime_update(interval: float = 2.0) -> None:
+    # New packages only load in a new process; never interrupt generation or downloads.
+    while True:
+        time.sleep(interval)
+        if (get_vibe_manager().job or {}).get("restart_required") and not _busy():
+            log.warning("Restarting Lux to load the updated Vibe runtime…")
+            _restart_server()
+            return
+
+
+def enable_auto_restart(restart) -> None:
+    global _restart_server
+    _restart_server = restart
+    threading.Thread(target=_restart_after_runtime_update, daemon=True).start()
+
+
 @app.get("/api/vibe/status")
 def vibe_status():
-    return get_vibe_manager().status()
+    return {**get_vibe_manager().status(), "auto_restart": _restart_server is not None}
 
 
 class VibeInstallRequest(BaseModel):
@@ -194,14 +222,14 @@ async def _vibe_upload_images(request: Request) -> list[bytes]:
     if request.headers.get("content-length"):
         try:
             if int(request.headers["content-length"]) > max_request:
-                raise HTTPException(413, "Choose up to 5 images, no larger than 10 MB each")
+                raise HTTPException(413, "Choose up to 5 images, no larger than 20 MB each")
         except ValueError:
             raise HTTPException(400, "Invalid request size")
     chunks = bytearray()
     async for chunk in request.stream():
         chunks.extend(chunk)
         if len(chunks) > max_request:
-            raise HTTPException(413, "Choose up to 5 images, no larger than 10 MB each")
+            raise HTTPException(413, "Choose up to 5 images, no larger than 20 MB each")
     content_type = request.headers.get("content-type", "").encode("ascii", "ignore")
     if content_type.lower().startswith(b"multipart/form-data"):
         message = BytesParser(policy=policy.default).parsebytes(
@@ -217,7 +245,7 @@ async def _vibe_upload_images(request: Request) -> list[bytes]:
     else:
         images = [bytes(chunks)]
     if any(len(data) > MAX_IMAGE_BYTES for data in images):
-        raise HTTPException(413, "Choose an image no larger than 10 MB")
+        raise HTTPException(413, "Choose an image no larger than 20 MB")
     return images
 
 
@@ -243,6 +271,9 @@ async def vibe_analyze(request: Request):
     if not vibe_status["installed"]:
         raise HTTPException(409, "EmbeddingGemma is not installed. Open Settings to install it.")
     if (vibe_status.get("job") or {}).get("restart_required"):
+        if _restart_server:
+            raise HTTPException(503, "The Vibe runtime was updated. Lux restarts automatically when no songs "
+                                "are generating or queued. Try again in a moment.")
         raise HTTPException(503, "The Vibe runtime was updated. In the Terminal window running Lux, press Ctrl+C and wait for the server to stop; then run ./studio.sh again. Refreshing the browser does not restart the runtime.")
     if not vibe_status.get("runtime_compatible", True):
         if vibe_status.get("runtime_missing"):
@@ -269,6 +300,7 @@ async def vibe_analyze(request: Request):
     except HTTPException:
         raise
     except Exception as error:
+        log.exception("Vibe image analysis failed")
         raise HTTPException(503, "Local image analysis failed. Check the Vibe model installation in Settings.") from error
     return {"entry_id": result["id"], "style": result["style"],
             "entry_ids": result.get("entry_ids", [result["id"]]), "image_count": len(uploads),

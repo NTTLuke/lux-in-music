@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import sys
 import tempfile
 import threading
 import types
@@ -90,8 +91,8 @@ class VibeCatalogTests(unittest.TestCase):
             rank_catalog(np.array([1, 0]), np.array([[1, 0, 0]]), [{"id": "a"}])
 
     def test_invalid_and_oversized_images_are_rejected(self):
-        with self.assertRaisesRegex(ValueError, "10 MB"):
-            validate_image(b"x" * (10 * 1024 * 1024 + 1))
+        with self.assertRaisesRegex(ValueError, "20 MB"):
+            validate_image(b"x" * (20 * 1024 * 1024 + 1))
         with self.assertRaises(ValueError):
             validate_image(b"not an image")
 
@@ -105,6 +106,11 @@ class VibeCatalogTests(unittest.TestCase):
             def __exit__(self, *_): return False
             def verify(self): calls.append("verify")
             def load(self): calls.append("load")
+            def draft(self, mode, size): calls.append("draft")
+            def thumbnail(self, size):
+                calls.append("thumbnail")
+                scale = min(1, size[0] / self.width, size[1] / self.height)
+                self.width, self.height = round(self.width * scale), round(self.height * scale)
             def convert(self, mode): self.mode = mode; return self
             def copy(self): return self
         image_module = types.ModuleType("PIL.Image")
@@ -121,15 +127,28 @@ class VibeCatalogTests(unittest.TestCase):
             image = validate_image(b"synthetic PNG bytes")
         self.assertEqual(image.mode, "RGB")
         self.assertEqual((image.width, image.height), (4, 3))
-        self.assertEqual(calls, ["verify", "exif", "load"])
+        self.assertEqual(calls, ["verify", "draft", "exif", "load", "thumbnail"])
+
+    def test_multi_picture_jpeg_from_a_camera_is_accepted(self):
+        fake, calls = self.with_fake_pillow(image_format="MPO")
+        with fake:
+            image = validate_image(b"synthetic MPO bytes")
+        self.assertEqual(image.mode, "RGB")
+        self.assertEqual(calls, ["verify", "draft", "exif", "load", "thumbnail"])
 
     def test_actual_file_format_and_pixel_limit_are_enforced(self):
         fake, _ = self.with_fake_pillow(image_format="GIF")
         with fake, self.assertRaisesRegex(ValueError, "JPG, PNG, or WebP"):
             validate_image(b"image bytes")
-        fake, _ = self.with_fake_pillow(width=5000, height=5000)
-        with fake, self.assertRaisesRegex(ValueError, "20 megapixels"):
+        fake, _ = self.with_fake_pillow(width=10000, height=9000)
+        with fake, self.assertRaisesRegex(ValueError, "89 megapixels"):
             validate_image(b"image bytes")
+
+    def test_phone_camera_resolution_is_accepted_and_downscaled_for_analysis(self):
+        fake, _ = self.with_fake_pillow(image_format="JPEG", width=8064, height=6048)
+        with fake:
+            image = validate_image(b"synthetic 48 MP bytes")
+        self.assertEqual((image.width, image.height), (2048, 1536))
 
 
 class VibeManagerTests(unittest.TestCase):
@@ -216,6 +235,28 @@ class VibeManagerTests(unittest.TestCase):
             self.assertIn(job["id"], manager.job["id"])
             manager.model_path.joinpath("model.safetensors").write_bytes(b"corrupt weights!!")
             self.assertFalse(manager._verify_hashes(manager._read_state()))
+
+    def test_runtime_update_keeps_the_running_interpreter_and_packages(self):
+        with tempfile.TemporaryDirectory() as temp:
+            def download(destination, progress):
+                weight = destination / "model.safetensors"
+                weight.write_bytes(b"synthetic test weights")
+                return [weight]
+            manager = VibeManager(Path(temp) / "weights", download)
+            manager.state_path = Path(temp) / "state.json"
+            runtimes = iter([{"compatible": False, "installed_version": None, "missing": ["torch"]},
+                             {"compatible": True, "installed_version": "6.1.0", "missing": []}])
+            completed = types.SimpleNamespace(returncode=0)
+            job = {"id": "synthetic"}
+            with patch("studio.vibe.vibe_runtime_status", side_effect=lambda: next(runtimes)), \
+                 patch("studio.vibe.shutil.which", return_value="/fake/uv"), \
+                 patch("studio.vibe.subprocess.run", return_value=completed) as run:
+                manager._install(job)
+            command = run.call_args.args[0]
+            self.assertEqual(job["status"], "done", job)
+            self.assertTrue(job["restart_required"])
+            self.assertIn("--inexact", command)
+            self.assertEqual(command[command.index("--python") + 1], sys.executable)
 
     def test_runtime_uses_local_only_text_image_model_without_audio(self):
         calls = {}
@@ -376,6 +417,28 @@ class VibeApiTests(unittest.TestCase):
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app), base_url="http://test") as client:
                 return await client.post(path, **kwargs)
         return asyncio.run(call())
+
+    def test_runtime_update_restarts_only_when_no_work_is_active(self):
+        from studio import app as studio_app
+        manager = types.SimpleNamespace(job={"restart_required": True})
+        busy = iter([True, True, False])
+        restarted = []
+        with patch("studio.app.get_vibe_manager", return_value=manager), \
+             patch("studio.app._busy", side_effect=lambda: next(busy)), \
+             patch("studio.app._restart_server", lambda: restarted.append(True)):
+            studio_app._restart_after_runtime_update(interval=0)
+        self.assertEqual(restarted, [True])
+
+    def test_active_generation_or_download_blocks_automatic_restart(self):
+        from studio import app as studio_app
+        idle = types.SimpleNamespace(status=lambda: {"jobs": [{"status": "done"}]})
+        downloading = types.SimpleNamespace(status=lambda: {"jobs": [{"status": "running"}]})
+        with patch.dict("studio.app.jobs", {}, clear=True), patch("studio.app.get_manager", return_value=idle):
+            self.assertFalse(studio_app._busy())
+            studio_app.jobs["synthetic"] = {"status": "queued"}
+            self.assertTrue(studio_app._busy())
+        with patch.dict("studio.app.jobs", {}, clear=True), patch("studio.app.get_manager", return_value=downloading):
+            self.assertTrue(studio_app._busy())
 
     def test_navigation_order_and_dedicated_vibe_screen(self):
         page = self.get("/").text

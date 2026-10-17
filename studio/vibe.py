@@ -7,10 +7,12 @@ import io
 import importlib.util
 from importlib import metadata
 import json
+import logging
 import math
 import os
 import shutil
 import subprocess
+import sys
 import threading
 import uuid
 from pathlib import Path
@@ -25,10 +27,13 @@ LICENSE_URL = "https://www.apache.org/licenses/LICENSE-2.0"
 GEMMA_TERMS_URL = "https://ai.google.dev/gemma/terms"
 LICENSE_REVIEW_ID = f"{MODEL_ID}@{REVISION}:{LICENSE_ID}+Google-Gemma-Terms"
 MODEL_URL = f"https://huggingface.co/{MODEL_ID}/tree/{REVISION}"
-MAX_IMAGE_BYTES = 10 * 1024 * 1024
-MAX_IMAGE_PIXELS = 20_000_000
+MAX_IMAGE_BYTES = 20 * 1024 * 1024
+# Pillow's own decompression-bomb threshold; the model itself sees well under 1 MP.
+MAX_IMAGE_PIXELS = 89_478_485
+ANALYSIS_EDGE = 2048
 MAX_VIBE_IMAGES = 5
 MIN_SENTENCE_TRANSFORMERS = "6.1.0"
+log = logging.getLogger("lux_in_music")
 CATALOG_PATH = Path(__file__).parent / "data" / "vibe-style-catalog.json"
 
 
@@ -132,18 +137,21 @@ def blend_catalog(image_vectors, catalog_vectors, catalog):
 
 def validate_image(data: bytes):
     if not data or len(data) > MAX_IMAGE_BYTES:
-        raise ValueError("Choose an image no larger than 10 MB")
+        raise ValueError("Choose an image no larger than 20 MB")
     try:
         from PIL import Image, ImageOps
         with Image.open(io.BytesIO(data)) as image:
-            if image.format not in {"JPEG", "PNG", "WEBP"}:
+            # Phone and camera JPEGs with extra pictures are reported as MPO.
+            if image.format not in {"JPEG", "MPO", "PNG", "WEBP"}:
                 raise ValueError("Use a JPG, PNG, or WebP image")
             if image.width * image.height > MAX_IMAGE_PIXELS:
-                raise ValueError("The image is too large to analyze (maximum 20 megapixels)")
+                raise ValueError("The image is too large to analyze (maximum 89 megapixels)")
             image.verify()
         with Image.open(io.BytesIO(data)) as image:
+            image.draft("RGB", (ANALYSIS_EDGE, ANALYSIS_EDGE))  # JPEG only: decode at reduced scale
             image = ImageOps.exif_transpose(image).convert("RGB")
             image.load()
+            image.thumbnail((ANALYSIS_EDGE, ANALYSIS_EDGE))
             return image.copy()
     except ValueError:
         raise
@@ -352,10 +360,14 @@ class VibeManager:
                 if not uv:
                     raise RuntimeError("Install uv, restart Lux, then update the Vibe runtime. Model files are already local.")
                 job.update(stage="updating_runtime")
-                prepared = subprocess.run([uv, "sync", "--frozen", "--extra", "vibe"],
+                # Keep the interpreter and packages of the running environment;
+                # otherwise uv may recreate .venv under Lux while it is running.
+                prepared = subprocess.run([uv, "sync", "--frozen", "--inexact", "--extra", "vibe",
+                                           "--python", sys.executable],
                     cwd=Path(__file__).parent.parent,
                     capture_output=True, text=True, timeout=3600)
                 if prepared.returncode:
+                    log.error("uv sync for the Vibe runtime failed:\n%s", prepared.stderr[-4000:])
                     raise RuntimeError("Could not update the local Vibe runtime. Check network access and disk space, then retry.")
                 runtime_updated = True
                 runtime = vibe_runtime_status()
@@ -403,6 +415,7 @@ class VibeManager:
                        completed_bytes=sum(x["size"] for x in verified.values()),
                        total_bytes=sum(x["size"] for x in verified.values()))
         except Exception as error:
+            log.exception("Vibe install failed at stage %s", job.get("stage"))
             message = str(error)
             if job.get("stage") in {"preparing_runtime", "updating_runtime"}:
                 message = "Could not prepare the local Vibe runtime. Check network access and disk space, then retry."

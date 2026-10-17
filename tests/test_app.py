@@ -116,10 +116,26 @@ class LaunchHostTests(unittest.TestCase):
         import contextlib, io
         from studio import launch
         out = io.StringIO()
-        with patch.object(sys, "argv", ["launch", "--no-open", *argv]), patch("uvicorn.run") as run, \
+        with patch.object(sys, "argv", ["launch", "--no-open", *argv]), patch("uvicorn.Config") as config, \
+                patch("uvicorn.Server"), patch("studio.app.enable_auto_restart"), \
                 contextlib.redirect_stdout(out):
             launch.main()
-        return run.call_args.kwargs["host"], out.getvalue()
+        return config.call_args.kwargs["host"], out.getvalue()
+
+    def test_requested_restart_stops_the_server_and_reexecs_without_opening_a_tab(self):
+        import contextlib, io
+        from studio import launch
+        class Server:
+            def __init__(self, config): self.should_exit = False
+            def run(self): restart_hooks[0]()
+        restart_hooks = []
+        with patch.object(sys, "argv", ["launch", "--port", "18001"]), patch("uvicorn.Config"), \
+                patch("uvicorn.Server", Server), patch("studio.launch.threading.Thread"), \
+                patch("studio.app.enable_auto_restart", restart_hooks.append), \
+                patch("studio.launch.os.execv") as execv, contextlib.redirect_stdout(io.StringIO()):
+            launch.main()
+        execv.assert_called_once_with(sys.executable, [sys.executable, "-m", "studio.launch",
+                                                       "--port", "18001", "--no-open"])
 
     def test_local_by_default_and_warns_when_listening_elsewhere(self):
         host, out = self.launch()

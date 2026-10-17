@@ -1,6 +1,8 @@
 """Start the UI first; inference processes are owned by the runtime adapters."""
 
 import argparse
+import os
+import sys
 import threading
 import time
 import urllib.request
@@ -38,10 +40,21 @@ def main():
     stop = threading.Event()
     if not args.no_open:
         threading.Thread(target=open_when_ready, args=(url, stop), daemon=True).start()
+    from . import app as studio_app
+    server = uvicorn.Server(uvicorn.Config(studio_app.app, host=args.host, port=args.port, log_level="warning"))
+    restart = threading.Event()
+    def request_restart():
+        restart.set()
+        server.should_exit = True
+    studio_app.enable_auto_restart(request_restart)
     try:
-        uvicorn.run("studio.app:app", host=args.host, port=args.port, log_level="warning")
+        server.run()
     finally:
         stop.set()
+    if restart.is_set():
+        # Same interpreter and terminal, so Ctrl+C keeps working; the open tab reconnects.
+        argv = sys.argv[1:] if "--no-open" in sys.argv[1:] else [*sys.argv[1:], "--no-open"]
+        os.execv(sys.executable, [sys.executable, "-m", "studio.launch", *argv])
 
 
 if __name__ == "__main__":

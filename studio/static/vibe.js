@@ -42,7 +42,7 @@ const Vibe = (() => {
         <input id="vibe-file" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden ${disabled}>
         <div class="vibe-drop ${files.length ? "has-image" : ""}" id="vibe-drop" tabindex="0" role="button" aria-label="Choose up to five JPG, PNG, or WebP images">
           <div class="vibe-placeholder"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-          <b>${files.length ? `${files.length} of 5 images` : "Drop up to 5 images here"}</b><span>JPG, PNG or WebP · up to 10 MB each</span>
+          <b>${files.length ? `${files.length} of 5 images` : "Drop up to 5 images here"}</b><span>JPG, PNG or WebP · up to 20 MB each</span>
           <div class="vibe-actions">${files.length < 5 ? `<button class="btn" type="button" id="vibe-browse" ${disabled}>${files.length ? "Add images" : "Browse files"}</button>` : ""}${files.length ? `<button class="btn" type="button" id="vibe-replace" ${disabled}>Replace all</button>` : ""}</div></div>
         </div>
         <div class="vibe-image-grid">${files.map((file, i) => `<figure class="vibe-thumb"><img src="${previewUrls[i]}" alt="Selected image ${i + 1}"><figcaption>${esc(file.name)}</figcaption><div class="vibe-thumb-actions">
@@ -71,7 +71,7 @@ const Vibe = (() => {
     let error = "";
     if (next.length > 5) error = "Choose up to 5 images. Remove an image before adding more.";
     else if (next.some(file => !/^image\/(jpeg|png|webp)$/.test(file.type))) error = "Use JPG, PNG, or WebP images.";
-    else if (next.some(file => file.size > 10 * 1024 * 1024)) error = "Each image must be no larger than 10 MB.";
+    else if (next.some(file => file.size > 20 * 1024 * 1024)) error = "Each image must be no larger than 20 MB.";
     if (error) { analysisError = error; $("vibe-error").textContent = error; return; }
     updateFiles(next);
   }
@@ -178,7 +178,8 @@ const Vibe = (() => {
       <div class="model-licenses"><h4>License — review before downloading</h4><p><b>Model: <a href="${esc(status?.license_url || "https://www.apache.org/licenses/LICENSE-2.0")}" target="_blank" rel="noopener noreferrer">Apache-2.0</a></b><br>Google Gemma terms also apply; review <a href="${esc(status?.gemma_terms_url || "https://ai.google.dev/gemma/terms")}" target="_blank" rel="noopener noreferrer">Google's Gemma Terms</a> before use.</p>
       <label class="license-accept"><input type="checkbox" id="vibe-license" ${checked ? "checked" : ""}> I have reviewed and accept these model terms.</label></div>
       <p class="hint">${status?.installed && status.runtime_compatible === false ? "Model files are verified. The local image runtime needs an update. Select Update Vibe runtime to prepare the required software and reuse these model files." : status?.installed ? "Model files verified on this computer. They remain local and are never uploaded." : status?.files_present ? "Model files were found but need repair or verification. Lux will reuse valid local files where possible." : "Not installed. Installing the model does not change your active music generation model."}</p>
-      ${job?.restart_required ? '<p class="hint" role="status">Vibe software updated. In the Terminal window running Lux, press <kbd>Ctrl+C</kbd> and wait for the server to stop, then run <code>./studio.sh</code> again. Refreshing the browser does not restart the runtime. The model files are already installed.</p>' : ""}
+      ${job?.restart_required && status.auto_restart ? '<p class="hint" role="status">Vibe software updated. Lux restarts automatically when no songs are generating or queued, then Vibe is ready. The model files are already installed.</p>' : ""}
+      ${job?.restart_required && !status.auto_restart ? '<p class="hint" role="status">Vibe software updated. In the Terminal window running Lux, press <kbd>Ctrl+C</kbd> and wait for the server to stop, then run <code>./studio.sh</code> again. Refreshing the browser does not restart the runtime. The model files are already installed.</p>' : ""}
       ${job?.status === "error" ? `<p class="error" role="alert">Setup failed: ${esc(job.error)} You can retry the installation.</p>` : ""}
       ${running ? `<progress max="100" ${job.stage === "downloading" ? `value="${percent}"` : ""} aria-label="Preparing EmbeddingGemma"></progress><p class="hint" role="status" aria-live="polite">${["preparing_runtime", "updating_runtime"].includes(job.stage) ? "Preparing the local inference runtime…" : job.stage === "downloading" ? `Downloading model files… ${percent}%` : "Verifying model files…"}</p>` : ""}
       <div class="model-actions"><button class="btn primary" id="vibe-install" type="button" ${!checked || running || (status?.installed && status.runtime_compatible !== false) ? "disabled" : ""}>${status?.installed && status.runtime_compatible === false ? "Update Vibe runtime" : status?.installed ? "Installed · Verified" : running ? "Installing…" : status?.files_present ? "Verify / repair Vibe" : "Download and prepare Vibe"}</button></div>
